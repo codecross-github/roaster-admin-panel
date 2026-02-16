@@ -15,6 +15,19 @@ class PitcherReportFormScreen extends StatefulWidget {
 class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
   final _formKey = GlobalKey<FormState>();
 
+  // User Search
+  String? _selectedUserId;
+  String? _selectedUserName;
+
+  // Sample users for search
+  final List<Map<String, String>> _users = [
+    {'id': '1', 'name': 'John Smith', 'email': 'john@example.com'},
+    {'id': '2', 'name': 'Jane Doe', 'email': 'jane@example.com'},
+    {'id': '3', 'name': 'Bob Wilson', 'email': 'bob@example.com'},
+    {'id': '4', 'name': 'Sarah Miller', 'email': 'sarah@example.com'},
+    {'id': '5', 'name': 'Tom Davis', 'email': 'tom@example.com'},
+  ];
+
   // Player Info
   final _playerNameController = TextEditingController();
   String _selectedPosition = 'RHP';
@@ -74,6 +87,15 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                 flex: 2,
                 child: Column(
                   children: [
+                    // User Search Card
+                    _buildCard(
+                      title: 'Assign to User',
+                      subtitle: 'Search for the user who requested this report',
+                      child: _buildUserSearch(),
+                    ),
+
+                    const SizedBox(height: 20),
+
                     // Player Info Card
                     _buildCard(
                       title: 'Player Information',
@@ -679,9 +701,128 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
     return (_pitchData.map((p) => p.spinRate).reduce((a, b) => a + b) / _pitchData.length).round();
   }
 
+  Widget _buildUserSearch() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Search Field
+        Autocomplete<Map<String, String>>(
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text.isEmpty) {
+              return const Iterable<Map<String, String>>.empty();
+            }
+            return _users.where((user) =>
+                user['name']!.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                user['email']!.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+          },
+          displayStringForOption: (user) => user['name']!,
+          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+            return TextField(
+              controller: controller,
+              focusNode: focusNode,
+              style: const TextStyle(color: AppColors.white),
+              decoration: InputDecoration(
+                hintText: 'Search by user name...',
+                prefixIcon: const Icon(Icons.search, color: AppColors.gray),
+                suffixIcon: _selectedUserId != null
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: AppColors.gray),
+                        onPressed: () {
+                          controller.clear();
+                          setState(() {
+                            _selectedUserId = null;
+                            _selectedUserName = null;
+                          });
+                        },
+                      )
+                    : null,
+              ),
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                color: AppColors.card,
+                elevation: 4,
+                borderRadius: BorderRadius.circular(8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200, maxWidth: 400),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, index) {
+                      final user = options.elementAt(index);
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: AppColors.primary.withOpacity(0.2),
+                          child: Text(
+                            user['name']![0],
+                            style: const TextStyle(color: AppColors.primary),
+                          ),
+                        ),
+                        title: Text(user['name']!, style: const TextStyle(color: AppColors.white)),
+                        subtitle: Text(user['email']!, style: const TextStyle(color: AppColors.gray, fontSize: 12)),
+                        onTap: () {
+                          onSelected(user);
+                          setState(() {
+                            _selectedUserId = user['id'];
+                            _selectedUserName = user['name'];
+                          });
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+          onSelected: (user) {
+            setState(() {
+              _selectedUserId = user['id'];
+              _selectedUserName = user['name'];
+            });
+          },
+        ),
+
+        // Selected User Display
+        if (_selectedUserId != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.success.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.success.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Assigned to: $_selectedUserName',
+                  style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   void _saveReport() {
     if (_formKey.currentState!.validate()) {
-      // Save report logic
+      if (_selectedUserId == null) {
+        Get.snackbar(
+          'Error',
+          'Please select a user to assign this report to',
+          backgroundColor: AppColors.error,
+          colorText: AppColors.white,
+        );
+        return;
+      }
       Get.snackbar(
         'Success',
         'Pitcher report saved successfully',

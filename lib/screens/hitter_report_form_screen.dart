@@ -14,6 +14,20 @@ class HitterReportFormScreen extends StatefulWidget {
 class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
   final _formKey = GlobalKey<FormState>();
 
+  // User Search
+  final _userSearchController = TextEditingController();
+  String? _selectedUserId;
+  String? _selectedUserName;
+
+  // Sample users for search
+  final List<Map<String, String>> _users = [
+    {'id': '1', 'name': 'John Smith', 'email': 'john@example.com'},
+    {'id': '2', 'name': 'Jane Doe', 'email': 'jane@example.com'},
+    {'id': '3', 'name': 'Bob Wilson', 'email': 'bob@example.com'},
+    {'id': '4', 'name': 'Sarah Miller', 'email': 'sarah@example.com'},
+    {'id': '5', 'name': 'Tom Davis', 'email': 'tom@example.com'},
+  ];
+
   // Player Info
   final _playerNameController = TextEditingController();
   String _selectedPosition = 'CF';
@@ -33,11 +47,13 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
   // Summary
   final _scoutSummaryController = TextEditingController();
 
-  // Video
-  String? _videoFileName;
+  // Videos (2 videos)
+  String? _videoFileName1;
+  String? _videoFileName2;
 
   @override
   void dispose() {
+    _userSearchController.dispose();
     _playerNameController.dispose();
     _airPullController.dispose();
     _chaseController.dispose();
@@ -81,6 +97,15 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                 flex: 2,
                 child: Column(
                   children: [
+                    // User Search Card
+                    _buildCard(
+                      title: 'Assign to User',
+                      subtitle: 'Search for the user who requested this report',
+                      child: _buildUserSearch(),
+                    ),
+
+                    const SizedBox(height: 20),
+
                     // Player Info Card
                     _buildCard(
                       title: 'Player Information',
@@ -161,36 +186,27 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
 
                     const SizedBox(height: 20),
 
-                    // Zone Graphics Section
+                    // Game Footage - 2 Videos
                     _buildCard(
-                      title: 'Zone Graphics',
+                      title: 'Game Footage',
+                      subtitle: 'Upload 2 video clips',
                       child: Row(
                         children: [
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Probability Zones vs LHP',
-                                  style: TextStyle(color: AppColors.gray, fontSize: 12),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildZoneHeatmap(),
-                              ],
+                            child: _buildVideoUpload(
+                              label: 'Video 1',
+                              fileName: _videoFileName1,
+                              onPick: () => setState(() => _videoFileName1 = 'hitter_clip_1.mp4'),
+                              onRemove: () => setState(() => _videoFileName1 = null),
                             ),
                           ),
-                          const SizedBox(width: 20),
+                          const SizedBox(width: 16),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Probability Zones vs RHP',
-                                  style: TextStyle(color: AppColors.gray, fontSize: 12),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildZoneHeatmap(),
-                              ],
+                            child: _buildVideoUpload(
+                              label: 'Video 2',
+                              fileName: _videoFileName2,
+                              onPick: () => setState(() => _videoFileName2 = 'hitter_clip_2.mp4'),
+                              onRemove: () => setState(() => _videoFileName2 = null),
                             ),
                           ),
                         ],
@@ -206,15 +222,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
               Expanded(
                 child: Column(
                   children: [
-                    // Video Upload
-                    _buildCard(
-                      title: 'Video Upload',
-                      child: _buildVideoUpload(),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Spray Chart
+                    // Graphics Section - 2 Graphics (Spray Chart + Zone Heatmap)
                     _buildCard(
                       title: 'Spray Chart',
                       child: Column(
@@ -222,6 +230,29 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                           _buildSprayChartFan(),
                           const SizedBox(height: 12),
                           // Legend
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _buildLegendItem(const Color(0xFF3B82F6), 'Low'),
+                              const SizedBox(width: 16),
+                              _buildLegendItem(const Color(0xFF22C55E), 'Medium'),
+                              const SizedBox(width: 16),
+                              _buildLegendItem(const Color(0xFFEF4444), 'High'),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Zone Heatmap
+                    _buildCard(
+                      title: 'Zone Heatmap',
+                      child: Column(
+                        children: [
+                          _buildZoneHeatmap(),
+                          const SizedBox(height: 12),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -257,6 +288,117 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildUserSearch() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Search Field
+        Autocomplete<Map<String, String>>(
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text.isEmpty) {
+              return const Iterable<Map<String, String>>.empty();
+            }
+            return _users.where((user) =>
+                user['name']!.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                user['email']!.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+          },
+          displayStringForOption: (user) => user['name']!,
+          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+            return TextField(
+              controller: controller,
+              focusNode: focusNode,
+              style: const TextStyle(color: AppColors.white),
+              decoration: InputDecoration(
+                hintText: 'Search by user name...',
+                prefixIcon: const Icon(Icons.search, color: AppColors.gray),
+                suffixIcon: _selectedUserId != null
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: AppColors.gray),
+                        onPressed: () {
+                          controller.clear();
+                          setState(() {
+                            _selectedUserId = null;
+                            _selectedUserName = null;
+                          });
+                        },
+                      )
+                    : null,
+              ),
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                color: AppColors.card,
+                elevation: 4,
+                borderRadius: BorderRadius.circular(8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200, maxWidth: 400),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, index) {
+                      final user = options.elementAt(index);
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: AppColors.primary.withOpacity(0.2),
+                          child: Text(
+                            user['name']![0],
+                            style: const TextStyle(color: AppColors.primary),
+                          ),
+                        ),
+                        title: Text(user['name']!, style: const TextStyle(color: AppColors.white)),
+                        subtitle: Text(user['email']!, style: const TextStyle(color: AppColors.gray, fontSize: 12)),
+                        onTap: () {
+                          onSelected(user);
+                          setState(() {
+                            _selectedUserId = user['id'];
+                            _selectedUserName = user['name'];
+                          });
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+          onSelected: (user) {
+            setState(() {
+              _selectedUserId = user['id'];
+              _selectedUserName = user['name'];
+            });
+          },
+        ),
+
+        // Selected User Display
+        if (_selectedUserId != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.success.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.success.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Assigned to: $_selectedUserName',
+                  style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -391,7 +533,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
   // Zone Heatmap - same as main app
   Widget _buildZoneHeatmap() {
     return Container(
-      height: 140,
+      height: 160,
       decoration: BoxDecoration(
         color: AppColors.sidebarBg,
         borderRadius: BorderRadius.circular(8),
@@ -400,59 +542,77 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: CustomPaint(
-          size: const Size(double.infinity, 140),
+          size: const Size(double.infinity, 160),
           painter: ZoneHeatmapPainter(),
         ),
       ),
     );
   }
 
-  Widget _buildVideoUpload() {
-    return Container(
-      height: 120,
-      decoration: BoxDecoration(
-        color: AppColors.sidebarBg,
-        borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
-        border: Border.all(color: AppColors.inputBorder),
-      ),
-      child: _videoFileName == null
-          ? InkWell(
-              onTap: _pickVideo,
-              borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildVideoUpload({
+    required String label,
+    String? fileName,
+    required VoidCallback onPick,
+    required VoidCallback onRemove,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: AppColors.gray, fontSize: 12)),
+        const SizedBox(height: 8),
+        Container(
+          height: 100,
+          decoration: BoxDecoration(
+            color: AppColors.sidebarBg,
+            borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+            border: Border.all(color: AppColors.inputBorder),
+          ),
+          child: fileName == null
+              ? InkWell(
+                  onTap: onPick,
+                  borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.cloud_upload_outlined, size: 28, color: AppColors.gray),
+                        const SizedBox(height: 4),
+                        const Text('Upload', style: TextStyle(color: AppColors.gray, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                )
+              : Stack(
                   children: [
-                    Icon(Icons.cloud_upload_outlined, size: 36, color: AppColors.gray),
-                    const SizedBox(height: 8),
-                    const Text('Click to upload video', style: TextStyle(color: AppColors.gray)),
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.videocam_outlined, size: 28, color: AppColors.success),
+                          const SizedBox(height: 4),
+                          Text(
+                            fileName,
+                            style: const TextStyle(color: AppColors.white, fontSize: 10),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: IconButton(
+                        onPressed: onRemove,
+                        icon: const Icon(Icons.close, size: 16),
+                        color: AppColors.error,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            )
-          : Stack(
-              children: [
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.videocam_outlined, size: 36, color: AppColors.success),
-                      const SizedBox(height: 8),
-                      Text(_videoFileName!, style: const TextStyle(color: AppColors.white)),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    onPressed: () => setState(() => _videoFileName = null),
-                    icon: const Icon(Icons.close, size: 18),
-                    color: AppColors.error,
-                  ),
-                ),
-              ],
-            ),
+        ),
+      ],
     );
   }
 
@@ -480,14 +640,17 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     );
   }
 
-  void _pickVideo() {
-    setState(() {
-      _videoFileName = 'hitter_highlight.mp4';
-    });
-  }
-
   void _saveReport() {
     if (_formKey.currentState!.validate()) {
+      if (_selectedUserId == null) {
+        Get.snackbar(
+          'Error',
+          'Please select a user to assign this report to',
+          backgroundColor: AppColors.error,
+          colorText: AppColors.white,
+        );
+        return;
+      }
       Get.snackbar(
         'Success',
         'Hitter report saved successfully',
