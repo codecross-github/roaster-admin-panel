@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../core/constants.dart';
+import '../controllers/auth_controller.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,8 +14,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
   bool _obscurePassword = true;
+
+  final _authController = Get.find<AuthController>();
 
   @override
   void dispose() {
@@ -25,13 +27,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleLogin() {
     if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
-
-      // Simulate login delay
-      Future.delayed(const Duration(seconds: 1), () {
-        setState(() => _isLoading = false);
-        Get.offAllNamed('/dashboard');
-      });
+      _authController.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
     }
   }
 
@@ -125,6 +124,35 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 24),
 
+                        // Error Message
+                        Obx(() {
+                          if (_authController.errorMessage.value.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red.withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _authController.errorMessage.value,
+                                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+
                         // Email Field
                         const Text(
                           'Email',
@@ -195,12 +223,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 32),
 
                         // Login Button
-                        SizedBox(
+                        Obx(() => SizedBox(
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleLogin,
-                            child: _isLoading
+                            onPressed: _authController.isLoading.value ? null : _handleLogin,
+                            child: _authController.isLoading.value
                                 ? const SizedBox(
                                     width: 24,
                                     height: 24,
@@ -211,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   )
                                 : const Text('Sign In'),
                           ),
-                        ),
+                        )),
                       ],
                     ),
                   ),
@@ -221,7 +249,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // Footer
                 Text(
-                  '2024 Roster Radar. All rights reserved.',
+                  '2026 Roster Radar. All rights reserved.',
                   style: TextStyle(
                     color: AppColors.gray,
                     fontSize: 12,

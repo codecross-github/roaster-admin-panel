@@ -1,8 +1,11 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:file_picker/file_picker.dart';
 import '../core/constants.dart';
 import '../widgets/admin_layout.dart';
+import '../widgets/player_photo_upload.dart';
 import '../models/report_model.dart';
 
 class PitcherReportFormScreen extends StatefulWidget {
@@ -46,6 +49,10 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
 
   // Summary
   final _scoutSummaryController = TextEditingController();
+
+  // Player Image
+  Uint8List? _playerImageBytes;
+  String? _playerImageFileName;
 
   // Video
   String? _videoFileName;
@@ -169,6 +176,19 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
               Expanded(
                 child: Column(
                   children: [
+                    // Player Photo
+                    _buildCard(
+                      title: 'Player Photo',
+                      child: PlayerPhotoUpload(
+                        imageBytes: _playerImageBytes,
+                        imageFileName: _playerImageFileName,
+                        onPick: _pickPlayerImage,
+                        onRemove: _removePlayerImage,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
                     // Video Upload
                     _buildCard(
                       title: 'Video Upload',
@@ -681,6 +701,40 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
         y: y,
         pitchType: _pitchData.isNotEmpty ? _pitchData.first.pitchType : 'Fastball',
       ));
+    });
+  }
+
+  Future<void> _pickPlayerImage() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
+    );
+
+    if (result != null && result.files.isNotEmpty) {
+      final file = result.files.first;
+
+      if (file.size > 5 * 1024 * 1024) {
+        Get.snackbar(
+          'Error',
+          'Image must be under 5MB',
+          backgroundColor: AppColors.error,
+          colorText: AppColors.white,
+        );
+        return;
+      }
+
+      setState(() {
+        _playerImageBytes = file.bytes;
+        _playerImageFileName = file.name;
+      });
+    }
+  }
+
+  void _removePlayerImage() {
+    setState(() {
+      _playerImageBytes = null;
+      _playerImageFileName = null;
     });
   }
 
