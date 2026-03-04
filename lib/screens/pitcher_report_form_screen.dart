@@ -7,29 +7,27 @@ import '../core/constants.dart';
 import '../widgets/admin_layout.dart';
 import '../widgets/player_photo_upload.dart';
 import '../models/report_model.dart';
+import '../models/report_request_model.dart';
+import '../services/report_service.dart';
 
 class PitcherReportFormScreen extends StatefulWidget {
   const PitcherReportFormScreen({super.key});
 
   @override
-  State<PitcherReportFormScreen> createState() => _PitcherReportFormScreenState();
+  State<PitcherReportFormScreen> createState() =>
+      _PitcherReportFormScreenState();
 }
 
 class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _reportService = ReportService();
+  bool _isSaving = false;
 
-  // User Search
+  // Request data (if navigated from a report request)
+  ReportRequestModel? _fromRequest;
+
+  // User info
   String? _selectedUserId;
-  String? _selectedUserName;
-
-  // Sample users for search
-  final List<Map<String, String>> _users = [
-    {'id': '1', 'name': 'John Smith', 'email': 'john@example.com'},
-    {'id': '2', 'name': 'Jane Doe', 'email': 'jane@example.com'},
-    {'id': '3', 'name': 'Bob Wilson', 'email': 'bob@example.com'},
-    {'id': '4', 'name': 'Sarah Miller', 'email': 'sarah@example.com'},
-    {'id': '5', 'name': 'Tom Davis', 'email': 'tom@example.com'},
-  ];
 
   // Player Info
   final _playerNameController = TextEditingController();
@@ -38,10 +36,30 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
 
   // Pitch Data
   final List<PitchData> _pitchData = [
-    PitchData(pitchType: 'Fastball', velocity: 95.0, ivb: 15.2, hb: -8.3, spinRate: 2350),
-    PitchData(pitchType: 'Slider', velocity: 87.0, ivb: 2.1, hb: 3.5, spinRate: 2650),
-    PitchData(pitchType: 'Curveball', velocity: 80.0, ivb: -8.5, hb: 6.2, spinRate: 2800),
-    PitchData(pitchType: 'Changeup', velocity: 85.0, ivb: 8.3, hb: -12.1, spinRate: 1850),
+    PitchData(
+        pitchType: 'Fastball',
+        velocity: 95.0,
+        ivb: 15.2,
+        hb: -8.3,
+        spinRate: 2350),
+    PitchData(
+        pitchType: 'Slider',
+        velocity: 87.0,
+        ivb: 2.1,
+        hb: 3.5,
+        spinRate: 2650),
+    PitchData(
+        pitchType: 'Curveball',
+        velocity: 80.0,
+        ivb: -8.5,
+        hb: 6.2,
+        spinRate: 2800),
+    PitchData(
+        pitchType: 'Changeup',
+        velocity: 85.0,
+        ivb: 8.3,
+        hb: -12.1,
+        spinRate: 1850),
   ];
 
   // Scatter points for pitch movement chart
@@ -56,6 +74,41 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
 
   // Video
   String? _videoFileName;
+  Uint8List? _videoBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if navigated from a report request
+    final args = Get.arguments;
+    if (args is ReportRequestModel) {
+      _fromRequest = args;
+      _playerNameController.text = args.playerName;
+      _selectedPosition = _normalizePitcherPosition(args.playerPosition);
+      _selectedUserId = args.userId;
+      // Infer throws from position
+      if (_selectedPosition == 'LHP') {
+        _selectedThrows = 'L';
+      }
+    }
+  }
+
+  static const _validPitcherPositions = ['RHP', 'LHP', 'RP', 'CP'];
+
+  /// Normalize a position string to one the pitcher dropdown accepts.
+  String _normalizePitcherPosition(String pos) {
+    const mappings = {
+      'SP': 'RHP', 'STARTER': 'RHP',
+      'RHP': 'RHP', 'LHP': 'LHP',
+      'RP': 'RP', 'RELIEVER': 'RP',
+      'CP': 'CP', 'CLOSER': 'CP',
+      'P': 'RHP', 'PITCHER': 'RHP',
+    };
+    final normalized = mappings[pos.toUpperCase()];
+    if (normalized != null) return normalized;
+    if (_validPitcherPositions.contains(pos)) return pos;
+    return 'RHP';
+  }
 
   @override
   void dispose() {
@@ -68,18 +121,27 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
   Widget build(BuildContext context) {
     return AdminLayout(
       currentIndex: 3,
-      title: 'New Pitcher Report',
+      title: _fromRequest != null
+          ? 'Report for ${_fromRequest!.playerName}'
+          : 'New Pitcher Report',
       actions: [
         OutlinedButton.icon(
-          onPressed: () => Get.back(),
+          onPressed: _isSaving ? null : () => Get.back(),
           icon: const Icon(Icons.close, size: 18),
           label: const Text('Cancel'),
         ),
         const SizedBox(width: 12),
         ElevatedButton.icon(
-          onPressed: _saveReport,
-          icon: const Icon(Icons.save_outlined, size: 18),
-          label: const Text('Save Report'),
+          onPressed: _isSaving ? null : _saveReport,
+          icon: _isSaving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.white),
+                )
+              : const Icon(Icons.save_outlined, size: 18),
+          label: Text(_isSaving ? 'Saving...' : 'Save Report'),
         ),
       ],
       child: SingleChildScrollView(
@@ -94,12 +156,50 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                 flex: 2,
                 child: Column(
                   children: [
-                    // User Search Card
-                    _buildCard(
-                      title: 'Assign to User',
-                      subtitle: 'Search for the user who requested this report',
-                      child: _buildUserSearch(),
-                    ),
+                    // User Info Card (from request or manual)
+                    if (_fromRequest != null)
+                      _buildCard(
+                        title: 'Assigned to User',
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: AppColors.success.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle,
+                                  color: AppColors.success, size: 20),
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Assigned to: ${_fromRequest!.userName}',
+                                    style: const TextStyle(
+                                        color: AppColors.success,
+                                        fontWeight: FontWeight.w500),
+                                  ),
+                                  Text(
+                                    _fromRequest!.userEmail,
+                                    style: const TextStyle(
+                                        color: AppColors.gray, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      _buildCard(
+                        title: 'Assign to User',
+                        subtitle:
+                            'Enter the user ID for this report',
+                        child: _buildUserIdInput(),
+                      ),
 
                     const SizedBox(height: 20),
 
@@ -124,7 +224,8 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                                   label: 'Position',
                                   value: _selectedPosition,
                                   items: ['RHP', 'LHP', 'RP', 'CP'],
-                                  onChanged: (v) => setState(() => _selectedPosition = v!),
+                                  onChanged: (v) =>
+                                      setState(() => _selectedPosition = v!),
                                 ),
                               ),
                               const SizedBox(width: 16),
@@ -133,7 +234,8 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                                   label: 'Throws',
                                   value: _selectedThrows,
                                   items: AppConstants.throwsOptions,
-                                  onChanged: (v) => setState(() => _selectedThrows = v!),
+                                  onChanged: (v) =>
+                                      setState(() => _selectedThrows = v!),
                                 ),
                               ),
                             ],
@@ -217,9 +319,11 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                       title: 'Quick Stats',
                       child: Column(
                         children: [
-                          _buildStatRow('Peak Velocity', '${_getMaxVelocity()} mph'),
+                          _buildStatRow(
+                              'Peak Velocity', '${_getMaxVelocity()} mph'),
                           const Divider(color: AppColors.inputBorder),
-                          _buildStatRow('Avg Spin Rate', '${_getAvgSpinRate()} rpm'),
+                          _buildStatRow(
+                              'Avg Spin Rate', '${_getAvgSpinRate()} rpm'),
                           const Divider(color: AppColors.inputBorder),
                           _buildStatRow('Pitch Count', '${_pitchData.length}'),
                         ],
@@ -232,6 +336,49 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildUserIdInput() {
+    final controller = TextEditingController(text: _selectedUserId ?? '');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: controller,
+          style: const TextStyle(color: AppColors.white),
+          decoration: const InputDecoration(
+            hintText: 'Enter User ID...',
+            prefixIcon: Icon(Icons.person_search, color: AppColors.gray),
+          ),
+          onChanged: (value) {
+            _selectedUserId = value.trim().isEmpty ? null : value.trim();
+          },
+        ),
+        if (_selectedUserId != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.success.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.success.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle,
+                    color: AppColors.success, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'User ID: $_selectedUserId',
+                  style: const TextStyle(
+                      color: AppColors.success, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -269,9 +416,7 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                     Text(
                       subtitle,
                       style: const TextStyle(
-                        color: AppColors.gray,
-                        fontSize: 12,
-                      ),
+                          color: AppColors.gray, fontSize: 12),
                     ),
                 ],
               ),
@@ -294,10 +439,8 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(color: AppColors.gray, fontSize: 13),
-        ),
+        Text(label,
+            style: const TextStyle(color: AppColors.gray, fontSize: 13)),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
@@ -319,14 +462,13 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(color: AppColors.gray, fontSize: 13),
-        ),
+        Text(label,
+            style: const TextStyle(color: AppColors.gray, fontSize: 13)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: value,
-          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+          items:
+              items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
           onChanged: onChanged,
           dropdownColor: AppColors.card,
           style: const TextStyle(color: AppColors.white),
@@ -376,19 +518,20 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                       .toList(),
                   onChanged: (v) => _updatePitch(index, pitchType: v),
                   dropdownColor: AppColors.card,
-                  style: const TextStyle(color: AppColors.white, fontSize: 14),
+                  style:
+                      const TextStyle(color: AppColors.white, fontSize: 14),
                   underline: const SizedBox(),
                   isExpanded: true,
                 ),
               ),
-              _buildTableCellInput(pitch.velocity.toString(), (v) =>
-                  _updatePitch(index, velocity: double.tryParse(v))),
-              _buildTableCellInput(pitch.ivb.toString(), (v) =>
-                  _updatePitch(index, ivb: double.tryParse(v))),
-              _buildTableCellInput(pitch.hb.toString(), (v) =>
-                  _updatePitch(index, hb: double.tryParse(v))),
-              _buildTableCellInput(pitch.spinRate.toString(), (v) =>
-                  _updatePitch(index, spinRate: int.tryParse(v))),
+              _buildTableCellInput(pitch.velocity.toString(),
+                  (v) => _updatePitch(index, velocity: double.tryParse(v))),
+              _buildTableCellInput(pitch.ivb.toString(),
+                  (v) => _updatePitch(index, ivb: double.tryParse(v))),
+              _buildTableCellInput(pitch.hb.toString(),
+                  (v) => _updatePitch(index, hb: double.tryParse(v))),
+              _buildTableCellInput(pitch.spinRate.toString(),
+                  (v) => _updatePitch(index, spinRate: int.tryParse(v))),
               _buildTableCell(
                 IconButton(
                   onPressed: () => _removePitch(index),
@@ -433,7 +576,8 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
         style: const TextStyle(color: AppColors.white, fontSize: 14),
         textAlign: TextAlign.center,
         decoration: InputDecoration(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           isDense: true,
           filled: true,
           fillColor: AppColors.sidebarBg,
@@ -451,7 +595,6 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
       onTapDown: (details) {
         final RenderBox box = context.findRenderObject() as RenderBox;
         final localPosition = box.globalToLocal(details.globalPosition);
-        // Convert to chart coordinates
         final x = (localPosition.dx / box.size.width * 40) - 20;
         final y = (1 - localPosition.dy / box.size.height) * 40 - 20;
         _addScatterPoint(x, y);
@@ -492,7 +635,8 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                 interval: 10,
                 getTitlesWidget: (value, meta) => Text(
                   value.toInt().toString(),
-                  style: const TextStyle(color: AppColors.gray, fontSize: 10),
+                  style:
+                      const TextStyle(color: AppColors.gray, fontSize: 10),
                 ),
               ),
             ),
@@ -506,12 +650,15 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                 interval: 10,
                 getTitlesWidget: (value, meta) => Text(
                   value.toInt().toString(),
-                  style: const TextStyle(color: AppColors.gray, fontSize: 10),
+                  style:
+                      const TextStyle(color: AppColors.gray, fontSize: 10),
                 ),
               ),
             ),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           ),
           scatterSpots: [
             ..._pitchData.map((pitch) {
@@ -532,7 +679,8 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                 point.y,
                 dotPainter: FlDotCirclePainter(
                   radius: 6,
-                  color: _getPitchColor(point.pitchType).withOpacity(0.7),
+                  color:
+                      _getPitchColor(point.pitchType).withOpacity(0.7),
                 ),
               );
             }),
@@ -567,34 +715,26 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
       decoration: BoxDecoration(
         color: AppColors.sidebarBg,
         borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
-        border: Border.all(
-          color: AppColors.inputBorder,
-          style: BorderStyle.solid,
-        ),
+        border: Border.all(color: AppColors.inputBorder),
       ),
       child: _videoFileName == null
           ? InkWell(
               onTap: _pickVideo,
-              borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+              borderRadius:
+                  BorderRadius.circular(AppConstants.radiusSmall),
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.cloud_upload_outlined,
-                      size: 40,
-                      color: AppColors.gray,
-                    ),
+                    Icon(Icons.cloud_upload_outlined,
+                        size: 40, color: AppColors.gray),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Click to upload video',
-                      style: TextStyle(color: AppColors.gray),
-                    ),
+                    const Text('Click to upload video',
+                        style: TextStyle(color: AppColors.gray)),
                     const SizedBox(height: 4),
-                    const Text(
-                      'MP4, MOV up to 100MB',
-                      style: TextStyle(color: AppColors.gray, fontSize: 12),
-                    ),
+                    const Text('MP4, MOV up to 100MB',
+                        style:
+                            TextStyle(color: AppColors.gray, fontSize: 12)),
                   ],
                 ),
               ),
@@ -605,11 +745,8 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
-                        Icons.videocam_outlined,
-                        size: 40,
-                        color: AppColors.success,
-                      ),
+                      const Icon(Icons.videocam_outlined,
+                          size: 40, color: AppColors.success),
                       const SizedBox(height: 8),
                       Text(
                         _videoFileName!,
@@ -623,7 +760,10 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                   top: 8,
                   right: 8,
                   child: IconButton(
-                    onPressed: () => setState(() => _videoFileName = null),
+                    onPressed: () => setState(() {
+                      _videoFileName = null;
+                      _videoBytes = null;
+                    }),
                     icon: const Icon(Icons.close, size: 18),
                     color: AppColors.error,
                   ),
@@ -639,16 +779,11 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: AppColors.gray),
-          ),
+          Text(label, style: const TextStyle(color: AppColors.gray)),
           Text(
             value,
             style: const TextStyle(
-              color: AppColors.white,
-              fontWeight: FontWeight.bold,
-            ),
+                color: AppColors.white, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -675,7 +810,8 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
     }
   }
 
-  void _updatePitch(int index, {
+  void _updatePitch(
+    int index, {
     String? pitchType,
     double? velocity,
     double? ivb,
@@ -699,7 +835,8 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
       _scatterPoints.add(ScatterPoint(
         x: x,
         y: y,
-        pitchType: _pitchData.isNotEmpty ? _pitchData.first.pitchType : 'Fastball',
+        pitchType:
+            _pitchData.isNotEmpty ? _pitchData.first.pitchType : 'Fastball',
       ));
     });
   }
@@ -738,11 +875,31 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
     });
   }
 
-  void _pickVideo() async {
-    // Simulating file picker
-    setState(() {
-      _videoFileName = 'pitcher_highlight.mp4';
-    });
+  Future<void> _pickVideo() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.video,
+      allowMultiple: false,
+      withData: true,
+    );
+
+    if (result != null && result.files.isNotEmpty) {
+      final file = result.files.first;
+
+      if (file.size > 100 * 1024 * 1024) {
+        Get.snackbar(
+          'Error',
+          'Video must be under 100MB',
+          backgroundColor: AppColors.error,
+          colorText: AppColors.white,
+        );
+        return;
+      }
+
+      setState(() {
+        _videoFileName = file.name;
+        _videoBytes = file.bytes;
+      });
+    }
   }
 
   double _getMaxVelocity() {
@@ -752,131 +909,78 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
 
   int _getAvgSpinRate() {
     if (_pitchData.isEmpty) return 0;
-    return (_pitchData.map((p) => p.spinRate).reduce((a, b) => a + b) / _pitchData.length).round();
+    return (_pitchData.map((p) => p.spinRate).reduce((a, b) => a + b) /
+            _pitchData.length)
+        .round();
   }
 
-  Widget _buildUserSearch() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Search Field
-        Autocomplete<Map<String, String>>(
-          optionsBuilder: (TextEditingValue textEditingValue) {
-            if (textEditingValue.text.isEmpty) {
-              return const Iterable<Map<String, String>>.empty();
-            }
-            return _users.where((user) =>
-                user['name']!.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                user['email']!.toLowerCase().contains(textEditingValue.text.toLowerCase()));
-          },
-          displayStringForOption: (user) => user['name']!,
-          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-            return TextField(
-              controller: controller,
-              focusNode: focusNode,
-              style: const TextStyle(color: AppColors.white),
-              decoration: InputDecoration(
-                hintText: 'Search by user name...',
-                prefixIcon: const Icon(Icons.search, color: AppColors.gray),
-                suffixIcon: _selectedUserId != null
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: AppColors.gray),
-                        onPressed: () {
-                          controller.clear();
-                          setState(() {
-                            _selectedUserId = null;
-                            _selectedUserName = null;
-                          });
-                        },
-                      )
-                    : null,
-              ),
-            );
-          },
-          optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                color: AppColors.card,
-                elevation: 4,
-                borderRadius: BorderRadius.circular(8),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 200, maxWidth: 400),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      final user = options.elementAt(index);
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.primary.withOpacity(0.2),
-                          child: Text(
-                            user['name']![0],
-                            style: const TextStyle(color: AppColors.primary),
-                          ),
-                        ),
-                        title: Text(user['name']!, style: const TextStyle(color: AppColors.white)),
-                        subtitle: Text(user['email']!, style: const TextStyle(color: AppColors.gray, fontSize: 12)),
-                        onTap: () {
-                          onSelected(user);
-                          setState(() {
-                            _selectedUserId = user['id'];
-                            _selectedUserName = user['name'];
-                          });
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-          onSelected: (user) {
-            setState(() {
-              _selectedUserId = user['id'];
-              _selectedUserName = user['name'];
-            });
-          },
-        ),
+  Future<void> _saveReport() async {
+    if (!_formKey.currentState!.validate()) return;
 
-        // Selected User Display
-        if (_selectedUserId != null) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.success.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.success.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.check_circle, color: AppColors.success, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Assigned to: $_selectedUserName',
-                  style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
+    if (_selectedUserId == null || _selectedUserId!.isEmpty) {
+      Get.snackbar(
+        'Error',
+        'Please assign this report to a user',
+        backgroundColor: AppColors.error,
+        colorText: AppColors.white,
+      );
+      return;
+    }
 
-  void _saveReport() {
-    if (_formKey.currentState!.validate()) {
-      if (_selectedUserId == null) {
-        Get.snackbar(
-          'Error',
-          'Please select a user to assign this report to',
-          backgroundColor: AppColors.error,
-          colorText: AppColors.white,
-        );
-        return;
+    if (_playerImageBytes == null) {
+      Get.snackbar(
+        'Error',
+        'Player photo is required. Please upload a player image.',
+        backgroundColor: AppColors.error,
+        colorText: AppColors.white,
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      // 1. Upload player image (mandatory)
+      final playerImageUrl = await _reportService.uploadImage(
+          _playerImageBytes!, _playerImageFileName!);
+
+      // 2. Upload video if present
+      String? videoUrl;
+      if (_videoBytes != null && _videoFileName != null) {
+        videoUrl = await _reportService.uploadVideo(
+            _videoBytes!, _videoFileName!);
       }
+
+      // 3. Build the report model
+      final report = ReportModel.pitcher(
+        id: '',
+        playerId: _fromRequest?.playerId ?? '',
+        playerName: _playerNameController.text.trim(),
+        position: _selectedPosition,
+        throwsHand: _selectedThrows,
+        createdAt: DateTime.now().toIso8601String(),
+        videoUrl: videoUrl,
+        playerImageUrl: playerImageUrl,
+        scoutSummary: _scoutSummaryController.text.trim(),
+        requestId: _fromRequest?.id,
+        userId: _selectedUserId,
+        peakVelocity: _getMaxVelocity(),
+        avgSpinRate: _getAvgSpinRate(),
+        pitchData: List<PitchData>.from(_pitchData),
+        scatterPoints: List<ScatterPoint>.from(_scatterPoints),
+      );
+
+      // 3. Save to Firestore
+      final reportId = await _reportService.createReport(report);
+
+      // 4. If from request, link report to request and mark completed
+      if (_fromRequest != null) {
+        await _reportService.linkReportToRequest(
+          _fromRequest!.id,
+          reportId,
+        );
+      }
+
       Get.snackbar(
         'Success',
         'Pitcher report saved successfully',
@@ -884,6 +988,16 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
         colorText: AppColors.white,
       );
       Get.offAllNamed('/reports');
+    } catch (e) {
+      debugPrint('Error saving pitcher report: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to save report. Please try again.',
+        backgroundColor: AppColors.error,
+        colorText: AppColors.white,
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 }

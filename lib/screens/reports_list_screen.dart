@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../core/constants.dart';
 import '../widgets/admin_layout.dart';
+import '../models/report_model.dart';
+import '../services/report_service.dart';
 
 class ReportsListScreen extends StatefulWidget {
   const ReportsListScreen({super.key});
@@ -11,80 +13,29 @@ class ReportsListScreen extends StatefulWidget {
 }
 
 class _ReportsListScreenState extends State<ReportsListScreen> {
+  final _reportService = ReportService();
   String _selectedFilter = 'All';
   String _searchQuery = '';
   final _searchController = TextEditingController();
 
-  final List<Map<String, dynamic>> _reports = [
-    {
-      'id': '1',
-      'playerName': 'Mike Johnson',
-      'position': 'RHP',
-      'type': 'pitcher',
-      'createdAt': '2024-01-15',
-      'peakVelo': 96.5,
-      'avgSpin': 2450,
-    },
-    {
-      'id': '2',
-      'playerName': 'Chris Williams',
-      'position': 'CF',
-      'type': 'hitter',
-      'createdAt': '2024-01-14',
-      'exitVelo': 94.2,
-      'battingAvg': .312,
-    },
-    {
-      'id': '3',
-      'playerName': 'Alex Brown',
-      'position': 'LHP',
-      'type': 'pitcher',
-      'createdAt': '2024-01-13',
-      'peakVelo': 93.2,
-      'avgSpin': 2380,
-    },
-    {
-      'id': '4',
-      'playerName': 'David Lee',
-      'position': 'SS',
-      'type': 'hitter',
-      'createdAt': '2024-01-12',
-      'exitVelo': 91.8,
-      'battingAvg': .285,
-    },
-    {
-      'id': '5',
-      'playerName': 'Ryan Garcia',
-      'position': 'RHP',
-      'type': 'pitcher',
-      'createdAt': '2024-01-11',
-      'peakVelo': 98.1,
-      'avgSpin': 2520,
-    },
-    {
-      'id': '6',
-      'playerName': 'James Wilson',
-      'position': '1B',
-      'type': 'hitter',
-      'createdAt': '2024-01-10',
-      'exitVelo': 96.5,
-      'battingAvg': .298,
-    },
-  ];
-
-  List<Map<String, dynamic>> get _filteredReports {
-    var reports = _reports;
+  List<ReportModel> _applyFilters(List<ReportModel> reports) {
+    var filtered = reports;
 
     if (_selectedFilter != 'All') {
-      reports = reports.where((r) => r['type'] == _selectedFilter.toLowerCase()).toList();
+      filtered = filtered
+          .where((r) => r.reportType == _selectedFilter.toLowerCase())
+          .toList();
     }
 
     if (_searchQuery.isNotEmpty) {
-      reports = reports.where((r) =>
-          r['playerName'].toString().toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+      filtered = filtered
+          .where((r) => r.playerName
+              .toLowerCase()
+              .contains(_searchQuery.toLowerCase()))
+          .toList();
     }
 
-    return reports;
+    return filtered;
   }
 
   @override
@@ -102,8 +53,10 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
             style: const TextStyle(color: AppColors.white),
             decoration: InputDecoration(
               hintText: 'Search reports...',
-              prefixIcon: const Icon(Icons.search, color: AppColors.gray, size: 20),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              prefixIcon:
+                  const Icon(Icons.search, color: AppColors.gray, size: 20),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               filled: true,
               fillColor: AppColors.card,
             ),
@@ -119,8 +72,10 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
             }
           },
           itemBuilder: (context) => [
-            const PopupMenuItem(value: 'pitcher', child: Text('New Pitcher Report')),
-            const PopupMenuItem(value: 'hitter', child: Text('New Hitter Report')),
+            const PopupMenuItem(
+                value: 'pitcher', child: Text('New Pitcher Report')),
+            const PopupMenuItem(
+                value: 'hitter', child: Text('New Hitter Report')),
           ],
           child: ElevatedButton.icon(
             onPressed: null,
@@ -131,38 +86,91 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
       ],
       child: Padding(
         padding: const EdgeInsets.all(AppConstants.paddingLarge),
-        child: Column(
-          children: [
-            // Filters
-            Row(
-              children: [
-                _buildFilterChip('All', _reports.length),
-                const SizedBox(width: 8),
-                _buildFilterChip('Pitcher', _reports.where((r) => r['type'] == 'pitcher').length),
-                const SizedBox(width: 8),
-                _buildFilterChip('Hitter', _reports.where((r) => r['type'] == 'hitter').length),
-              ],
-            ),
+        child: StreamBuilder<List<ReportModel>>(
+          stream: _reportService.streamReports(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child:
+                    CircularProgressIndicator(color: AppColors.primary),
+              );
+            }
 
-            const SizedBox(height: 24),
-
-            // Reports Grid
-            Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 1.4,
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'Error loading reports: ${snapshot.error}',
+                  style: const TextStyle(color: AppColors.error),
                 ),
-                itemCount: _filteredReports.length,
-                itemBuilder: (context, index) {
-                  final report = _filteredReports[index];
-                  return _buildReportCard(report);
-                },
-              ),
-            ),
-          ],
+              );
+            }
+
+            final allReports = snapshot.data ?? [];
+            final filteredReports = _applyFilters(allReports);
+
+            return Column(
+              children: [
+                // Filters
+                Row(
+                  children: [
+                    _buildFilterChip('All', allReports.length),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      'Pitcher',
+                      allReports
+                          .where((r) => r.reportType == 'pitcher')
+                          .length,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      'Hitter',
+                      allReports
+                          .where((r) => r.reportType == 'hitter')
+                          .length,
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // Reports Grid
+                Expanded(
+                  child: filteredReports.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.article_outlined,
+                                  size: 64,
+                                  color:
+                                      AppColors.gray.withOpacity(0.5)),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'No reports found',
+                                style: TextStyle(
+                                    color: AppColors.gray, fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        )
+                      : GridView.builder(
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 16,
+                            childAspectRatio: 1.4,
+                          ),
+                          itemCount: filteredReports.length,
+                          itemBuilder: (context, index) {
+                            final report = filteredReports[index];
+                            return _buildReportCard(report);
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -177,9 +185,12 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
           Text(label),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: isSelected ? AppColors.white.withOpacity(0.2) : AppColors.gray.withOpacity(0.3),
+              color: isSelected
+                  ? AppColors.white.withOpacity(0.2)
+                  : AppColors.gray.withOpacity(0.3),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -201,19 +212,23 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
       ),
       backgroundColor: AppColors.card,
-      side: BorderSide(color: isSelected ? AppColors.primary : AppColors.inputBorder),
+      side: BorderSide(
+          color: isSelected ? AppColors.primary : AppColors.inputBorder),
     );
   }
 
-  Widget _buildReportCard(Map<String, dynamic> report) {
-    final isPitcher = report['type'] == 'pitcher';
-    final typeColor = isPitcher ? AppColors.pitcherBlue : AppColors.hitterGreen;
+  Widget _buildReportCard(ReportModel report) {
+    final isPitcher = report.reportType == 'pitcher';
+    final typeColor =
+        isPitcher ? AppColors.pitcherBlue : AppColors.hitterGreen;
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-        border: Border.all(color: typeColor.withOpacity(0.3), width: 2),
+        borderRadius:
+            BorderRadius.circular(AppConstants.radiusMedium),
+        border:
+            Border.all(color: typeColor.withOpacity(0.3), width: 2),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,8 +239,10 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
             decoration: BoxDecoration(
               color: typeColor.withOpacity(0.1),
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(AppConstants.radiusMedium - 2),
-                topRight: Radius.circular(AppConstants.radiusMedium - 2),
+                topLeft:
+                    Radius.circular(AppConstants.radiusMedium - 2),
+                topRight:
+                    Radius.circular(AppConstants.radiusMedium - 2),
               ),
             ),
             child: Row(
@@ -239,7 +256,7 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
                   ),
                   child: Center(
                     child: Text(
-                      report['position'],
+                      report.position,
                       style: TextStyle(
                         color: typeColor,
                         fontWeight: FontWeight.bold,
@@ -254,7 +271,7 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        report['playerName'],
+                        report.playerName,
                         style: const TextStyle(
                           color: AppColors.white,
                           fontWeight: FontWeight.bold,
@@ -262,23 +279,24 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
                         ),
                       ),
                       Text(
-                        isPitcher ? 'Pitcher Report' : 'Hitter Report',
-                        style: TextStyle(color: typeColor, fontSize: 12),
+                        isPitcher
+                            ? 'Pitcher Report'
+                            : 'Hitter Report',
+                        style:
+                            TextStyle(color: typeColor, fontSize: 12),
                       ),
                     ],
                   ),
                 ),
                 PopupMenuButton(
-                  icon: const Icon(Icons.more_vert, color: AppColors.gray, size: 20),
+                  icon: const Icon(Icons.more_vert,
+                      color: AppColors.gray, size: 20),
                   itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'view', child: Text('View')),
-                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    const PopupMenuItem(
+                        value: 'delete', child: Text('Delete')),
                   ],
                   onSelected: (value) {
-                    if (value == 'edit') {
-                      Get.toNamed(isPitcher ? '/report/pitcher' : '/report/hitter');
-                    } else if (value == 'delete') {
+                    if (value == 'delete') {
                       _showDeleteDialog(report);
                     }
                   },
@@ -298,12 +316,26 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: isPitcher
                         ? [
-                            _buildStatItem('Peak Velo', '${report['peakVelo']} mph'),
-                            _buildStatItem('Avg Spin', '${report['avgSpin']} rpm'),
+                            _buildStatItem(
+                              'Peak Velo',
+                              '${report.peakVelocity?.toStringAsFixed(1) ?? '-'} mph',
+                            ),
+                            _buildStatItem(
+                              'Avg Spin',
+                              '${report.avgSpinRate ?? '-'} rpm',
+                            ),
                           ]
                         : [
-                            _buildStatItem('Exit Velo', '${report['exitVelo']} mph'),
-                            _buildStatItem('Batting Avg', report['battingAvg'].toStringAsFixed(3)),
+                            _buildStatItem(
+                              'Exit Velo',
+                              '${report.hitterStats?.exitVelocity.toStringAsFixed(1) ?? '-'} mph',
+                            ),
+                            _buildStatItem(
+                              'Batting Avg',
+                              report.hitterStats?.battingAverage
+                                      .toStringAsFixed(3) ??
+                                  '-',
+                            ),
                           ],
                   ),
                 ],
@@ -313,22 +345,31 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
 
           // Footer
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.inputBorder.withOpacity(0.5))),
+              border: Border(
+                  top: BorderSide(
+                      color:
+                          AppColors.inputBorder.withOpacity(0.5))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  report['createdAt'],
-                  style: const TextStyle(color: AppColors.gray, fontSize: 12),
+                  _formatDate(report.createdAt),
+                  style: const TextStyle(
+                      color: AppColors.gray, fontSize: 12),
                 ),
                 Row(
                   children: [
-                    Icon(Icons.videocam_outlined, size: 16, color: AppColors.gray),
+                    if (report.videoUrl != null &&
+                        report.videoUrl!.isNotEmpty)
+                      const Icon(Icons.videocam_outlined,
+                          size: 16, color: AppColors.success),
                     const SizedBox(width: 4),
-                    Icon(Icons.insert_chart_outlined, size: 16, color: AppColors.gray),
+                    const Icon(Icons.insert_chart_outlined,
+                        size: 16, color: AppColors.gray),
                   ],
                 ),
               ],
@@ -353,20 +394,35 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
         const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(color: AppColors.gray, fontSize: 12),
+          style:
+              const TextStyle(color: AppColors.gray, fontSize: 12),
         ),
       ],
     );
   }
 
-  void _showDeleteDialog(Map<String, dynamic> report) {
+  String _formatDate(String isoDate) {
+    try {
+      final date = DateTime.parse(isoDate);
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    } catch (_) {
+      return isoDate;
+    }
+  }
+
+  void _showDeleteDialog(ReportModel report) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.card,
-        title: const Text('Delete Report', style: TextStyle(color: AppColors.white)),
+        title: const Text('Delete Report',
+            style: TextStyle(color: AppColors.white)),
         content: Text(
-          'Are you sure you want to delete the report for ${report['playerName']}?',
+          'Are you sure you want to delete the report for ${report.playerName}?',
           style: const TextStyle(color: AppColors.gray),
         ),
         actions: [
@@ -375,19 +431,27 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              setState(() {
-                _reports.removeWhere((r) => r['id'] == report['id']);
-              });
-              Get.snackbar(
-                'Deleted',
-                'Report deleted successfully',
-                backgroundColor: AppColors.error,
-                colorText: AppColors.white,
-              );
+              try {
+                await _reportService.deleteReport(report.id);
+                Get.snackbar(
+                  'Deleted',
+                  'Report deleted successfully',
+                  backgroundColor: AppColors.error,
+                  colorText: AppColors.white,
+                );
+              } catch (e) {
+                Get.snackbar(
+                  'Error',
+                  'Failed to delete report',
+                  backgroundColor: AppColors.error,
+                  colorText: AppColors.white,
+                );
+              }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error),
             child: const Text('Delete'),
           ),
         ],

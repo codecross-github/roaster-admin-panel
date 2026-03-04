@@ -14,7 +14,7 @@ Future<void> _seedAdminCred() async {
   if (snapshot.docs.isEmpty) {
     await collection.add({
       'name': 'Super Admin',
-      'email': 'admin@rosterradar.com',
+        'email': 'admin@rosterradar.com',
       'password': 'admin123',
       'role': 'super_admin',
       'isActive': true,

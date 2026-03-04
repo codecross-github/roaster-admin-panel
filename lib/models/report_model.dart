@@ -145,24 +145,46 @@ class ZoneHeatmap {
 
   ZoneHeatmap({required this.zones});
 
-  factory ZoneHeatmap.fromJson(Map<String, dynamic> json) {
-    final rawZones = json['zones'] as List<dynamic>?;
-    if (rawZones == null) {
-      return ZoneHeatmap(zones: [
+  /// Default empty 3×3 grid.
+  static ZoneHeatmap empty() => ZoneHeatmap(zones: [
         [0.0, 0.0, 0.0],
         [0.0, 0.0, 0.0],
         [0.0, 0.0, 0.0],
       ]);
+
+  factory ZoneHeatmap.fromJson(Map<String, dynamic> json) {
+    final raw = json['zones'];
+    if (raw == null) return ZoneHeatmap.empty();
+
+    // Support both flat list [v0..v8] and legacy nested list [[row0],[row1],[row2]]
+    if (raw is List && raw.isNotEmpty) {
+      if (raw.first is List) {
+        // Legacy nested array format — convert to 3×3
+        return ZoneHeatmap(
+          zones: raw
+              .map((row) => (row as List<dynamic>)
+                  .map((v) => (v as num).toDouble())
+                  .toList())
+              .toList(),
+        );
+      } else {
+        // Flat list of 9 values — reconstruct 3×3
+        final flat = raw.map((v) => (v as num).toDouble()).toList();
+        if (flat.length < 9) return ZoneHeatmap.empty();
+        return ZoneHeatmap(zones: [
+          flat.sublist(0, 3),
+          flat.sublist(3, 6),
+          flat.sublist(6, 9),
+        ]);
+      }
     }
-    return ZoneHeatmap(
-      zones: rawZones.map((row) =>
-          (row as List<dynamic>).map((val) => (val as num).toDouble()).toList()
-      ).toList(),
-    );
+    return ZoneHeatmap.empty();
   }
 
+  /// Serialise as a flat list of 9 values — Firestore does not support nested arrays.
   Map<String, dynamic> toJson() {
-    return {'zones': zones};
+    final flat = zones.expand((row) => row).toList();
+    return {'zones': flat};
   }
 }
 
@@ -175,7 +197,13 @@ class ReportModel {
   final String reportType; // 'pitcher' or 'hitter'
   final String createdAt;
   final String? videoUrl;
+  final String? videoUrl2; // Second video (hitter reports)
+  final String? playerImageUrl; // Player photo URL
   final String scoutSummary;
+
+  // Links back to request and user
+  final String? requestId;
+  final String? userId;
 
   // Pitcher specific
   final double? peakVelocity;
@@ -198,7 +226,11 @@ class ReportModel {
     required this.reportType,
     required this.createdAt,
     this.videoUrl,
+    this.videoUrl2,
+    this.playerImageUrl,
     required this.scoutSummary,
+    this.requestId,
+    this.userId,
     this.peakVelocity,
     this.avgSpinRate,
     this.pitchData,
@@ -217,7 +249,10 @@ class ReportModel {
     required String throwsHand,
     required String createdAt,
     String? videoUrl,
+    String? playerImageUrl,
     required String scoutSummary,
+    String? requestId,
+    String? userId,
     required double peakVelocity,
     required int avgSpinRate,
     required List<PitchData> pitchData,
@@ -232,7 +267,10 @@ class ReportModel {
       reportType: 'pitcher',
       createdAt: createdAt,
       videoUrl: videoUrl,
+      playerImageUrl: playerImageUrl,
       scoutSummary: scoutSummary,
+      requestId: requestId,
+      userId: userId,
       peakVelocity: peakVelocity,
       avgSpinRate: avgSpinRate,
       pitchData: pitchData,
@@ -248,7 +286,11 @@ class ReportModel {
     required String throwsHand,
     required String createdAt,
     String? videoUrl,
+    String? videoUrl2,
+    String? playerImageUrl,
     required String scoutSummary,
+    String? requestId,
+    String? userId,
     required HitterStats hitterStats,
     required List<SprayChartPoint> sprayChartPoints,
     required ZoneHeatmap zoneVsLHP,
@@ -263,7 +305,11 @@ class ReportModel {
       reportType: 'hitter',
       createdAt: createdAt,
       videoUrl: videoUrl,
+      videoUrl2: videoUrl2,
+      playerImageUrl: playerImageUrl,
       scoutSummary: scoutSummary,
+      requestId: requestId,
+      userId: userId,
       hitterStats: hitterStats,
       sprayChartPoints: sprayChartPoints,
       zoneVsLHP: zoneVsLHP,
@@ -283,7 +329,11 @@ class ReportModel {
       reportType: reportType,
       createdAt: json['createdAt'] ?? '',
       videoUrl: json['videoUrl'],
+      videoUrl2: json['videoUrl2'],
+      playerImageUrl: json['playerImageUrl'],
       scoutSummary: json['scoutSummary'] ?? '',
+      requestId: json['requestId'],
+      userId: json['userId'],
       peakVelocity: json['peakVelocity']?.toDouble(),
       avgSpinRate: json['avgSpinRate'],
       pitchData: json['pitchData'] != null
@@ -317,7 +367,11 @@ class ReportModel {
       'reportType': reportType,
       'createdAt': createdAt,
       'videoUrl': videoUrl,
+      'videoUrl2': videoUrl2,
+      'playerImageUrl': playerImageUrl,
       'scoutSummary': scoutSummary,
+      'requestId': requestId,
+      'userId': userId,
     };
 
     if (reportType == 'pitcher') {

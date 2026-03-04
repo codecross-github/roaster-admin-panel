@@ -2,9 +2,53 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../core/constants.dart';
 import '../widgets/admin_layout.dart';
+import '../models/report_model.dart';
+import '../models/report_request_model.dart';
+import '../services/report_service.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final _reportService = ReportService();
+
+  int _totalReports = 0;
+  int _pendingRequests = 0;
+  int _totalRequests = 0;
+  bool _countsLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCounts();
+  }
+
+  Future<void> _loadCounts() async {
+    try {
+      final results = await Future.wait([
+        _reportService.getTotalReportsCount(),
+        _reportService.getPendingRequestsCount(),
+        _reportService.getTotalRequestsCount(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _totalReports = results[0];
+          _pendingRequests = results[1];
+          _totalRequests = results[2];
+          _countsLoaded = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading dashboard counts: $e');
+      if (mounted) {
+        setState(() => _countsLoaded = true);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,45 +65,28 @@ class DashboardScreen extends StatelessWidget {
               children: [
                 Expanded(
                   child: _buildStatCard(
-                    title: 'Total Users',
-                    value: '1,234',
-                    change: '+12%',
-                    changePositive: true,
-                    icon: Icons.people_outline,
+                    title: 'Total Requests',
+                    value: _countsLoaded ? _totalRequests.toString() : '...',
+                    icon: Icons.pending_actions_outlined,
                     iconColor: AppColors.info,
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: _buildStatCard(
-                    title: 'Premium Users',
-                    value: '456',
-                    change: '+8%',
-                    changePositive: true,
-                    icon: Icons.star_outline,
-                    iconColor: AppColors.premium,
+                    title: 'Pending Requests',
+                    value: _countsLoaded ? _pendingRequests.toString() : '...',
+                    icon: Icons.hourglass_empty_outlined,
+                    iconColor: AppColors.warning,
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: _buildStatCard(
                     title: 'Total Reports',
-                    value: '789',
-                    change: '+23%',
-                    changePositive: true,
+                    value: _countsLoaded ? _totalReports.toString() : '...',
                     icon: Icons.article_outlined,
                     iconColor: AppColors.accent,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildStatCard(
-                    title: 'Pending Requests',
-                    value: '12',
-                    change: '5 new',
-                    changePositive: false,
-                    icon: Icons.pending_actions_outlined,
-                    iconColor: AppColors.warning,
                   ),
                 ),
               ],
@@ -94,11 +121,6 @@ class DashboardScreen extends StatelessWidget {
                 Expanded(
                   child: _buildRecentReports(),
                 ),
-                const SizedBox(width: 16),
-                // Recent Users
-                Expanded(
-                  child: _buildRecentUsers(),
-                ),
               ],
             ),
           ],
@@ -110,8 +132,6 @@ class DashboardScreen extends StatelessWidget {
   Widget _buildStatCard({
     required String title,
     required String value,
-    required String change,
-    required bool changePositive,
     required IconData icon,
     required Color iconColor,
   }) {
@@ -125,34 +145,13 @@ class DashboardScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
-                ),
-                child: Icon(icon, color: iconColor, size: 24),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (changePositive ? AppColors.success : AppColors.warning)
-                      .withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  change,
-                  style: TextStyle(
-                    color: changePositive ? AppColors.success : AppColors.warning,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+            ),
+            child: Icon(icon, color: iconColor, size: 24),
           ),
           const SizedBox(height: 16),
           Text(
@@ -166,10 +165,7 @@ class DashboardScreen extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             title,
-            style: const TextStyle(
-              color: AppColors.gray,
-              fontSize: 14,
-            ),
+            style: const TextStyle(color: AppColors.gray, fontSize: 14),
           ),
         ],
       ),
@@ -177,13 +173,6 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Widget _buildRecentRequests() {
-    final requests = [
-      {'user': 'John Smith', 'player': 'Mike Johnson', 'type': 'Pitcher', 'status': 'Pending', 'date': '2 hours ago'},
-      {'user': 'Jane Doe', 'player': 'Chris Williams', 'type': 'Hitter', 'status': 'In Progress', 'date': '5 hours ago'},
-      {'user': 'Bob Wilson', 'player': 'Alex Brown', 'type': 'Pitcher', 'status': 'Pending', 'date': '1 day ago'},
-      {'user': 'Sarah Miller', 'player': 'David Lee', 'type': 'Hitter', 'status': 'Pending', 'date': '2 days ago'},
-    ];
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -213,20 +202,51 @@ class DashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const Divider(color: AppColors.inputBorder),
-          ...requests.map((req) => _buildRequestItem(req)),
+          StreamBuilder<List<ReportRequestModel>>(
+            stream: _reportService.streamReportRequests(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                        color: AppColors.primary, strokeWidth: 2),
+                  ),
+                );
+              }
+
+              final requests = snapshot.data ?? [];
+              if (requests.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(
+                    child: Text(
+                      'No requests yet',
+                      style: TextStyle(color: AppColors.gray),
+                    ),
+                  ),
+                );
+              }
+
+              final recent = requests.take(5).toList();
+              return Column(
+                children: recent.map((req) => _buildRequestItem(req)).toList(),
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildRequestItem(Map<String, String> request) {
-    final statusColor = request['status'] == 'Pending'
+  Widget _buildRequestItem(ReportRequestModel request) {
+    final statusColor = request.status == 'Pending'
         ? AppColors.warning
-        : request['status'] == 'In Progress'
+        : request.status == 'In Progress'
             ? AppColors.info
             : AppColors.success;
 
-    final typeColor = request['type'] == 'Pitcher'
+    final typeColor = request.reportType == 'pitcher'
         ? AppColors.pitcherBlue
         : AppColors.hitterGreen;
 
@@ -245,18 +265,15 @@ class DashboardScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  request['player']!,
+                  request.playerName,
                   style: const TextStyle(
                     color: AppColors.white,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 Text(
-                  'Requested by ${request['user']}',
-                  style: const TextStyle(
-                    color: AppColors.gray,
-                    fontSize: 12,
-                  ),
+                  'Requested by ${request.userName}',
+                  style: const TextStyle(color: AppColors.gray, fontSize: 12),
                 ),
               ],
             ),
@@ -268,7 +285,7 @@ class DashboardScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              request['type']!,
+              request.reportType == 'pitcher' ? 'Pitcher' : 'Hitter',
               style: TextStyle(
                 color: typeColor,
                 fontSize: 12,
@@ -284,7 +301,7 @@ class DashboardScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              request['status']!,
+              request.status,
               style: TextStyle(
                 color: statusColor,
                 fontSize: 12,
@@ -294,11 +311,8 @@ class DashboardScreen extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            request['date']!,
-            style: const TextStyle(
-              color: AppColors.gray,
-              fontSize: 12,
-            ),
+            _formatDate(request.requestedAt),
+            style: const TextStyle(color: AppColors.gray, fontSize: 12),
           ),
         ],
       ),
@@ -340,13 +354,6 @@ class DashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _buildQuickActionButton(
-            icon: Icons.person_add_outlined,
-            label: 'Add New Player',
-            color: AppColors.primary,
-            onTap: () => Get.toNamed('/players'),
-          ),
-          const SizedBox(height: 12),
-          _buildQuickActionButton(
             icon: Icons.pending_actions_outlined,
             label: 'View Requests',
             color: AppColors.warning,
@@ -381,10 +388,7 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(width: 12),
               Text(
                 label,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(color: color, fontWeight: FontWeight.w500),
               ),
               const Spacer(),
               Icon(Icons.arrow_forward_ios, color: color, size: 14),
@@ -396,14 +400,6 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Widget _buildRecentReports() {
-    final reports = [
-      {'player': 'Mike Johnson', 'type': 'Pitcher', 'date': 'Jan 15, 2024'},
-      {'player': 'Chris Williams', 'type': 'Hitter', 'date': 'Jan 14, 2024'},
-      {'player': 'Alex Brown', 'type': 'Pitcher', 'date': 'Jan 13, 2024'},
-      {'player': 'David Lee', 'type': 'Hitter', 'date': 'Jan 12, 2024'},
-      {'player': 'Ryan Garcia', 'type': 'Pitcher', 'date': 'Jan 11, 2024'},
-    ];
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -432,14 +428,46 @@ class DashboardScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          ...reports.map((report) => _buildReportListItem(report)),
+          StreamBuilder<List<ReportModel>>(
+            stream: _reportService.streamReports(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                        color: AppColors.primary, strokeWidth: 2),
+                  ),
+                );
+              }
+
+              final reports = snapshot.data ?? [];
+              if (reports.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(
+                    child: Text(
+                      'No reports yet',
+                      style: TextStyle(color: AppColors.gray),
+                    ),
+                  ),
+                );
+              }
+
+              final recent = reports.take(5).toList();
+              return Column(
+                children:
+                    recent.map((report) => _buildReportListItem(report)).toList(),
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildReportListItem(Map<String, String> report) {
-    final typeColor = report['type'] == 'Pitcher'
+  Widget _buildReportListItem(ReportModel report) {
+    final typeColor = report.reportType == 'pitcher'
         ? AppColors.pitcherBlue
         : AppColors.hitterGreen;
 
@@ -460,7 +488,7 @@ class DashboardScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              report['type'] == 'Pitcher'
+              report.reportType == 'pitcher'
                   ? Icons.sports_baseball_outlined
                   : Icons.sports_cricket_outlined,
               color: typeColor,
@@ -473,145 +501,53 @@ class DashboardScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  report['player']!,
+                  report.playerName,
                   style: const TextStyle(
                     color: AppColors.white,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 Text(
-                  '${report['type']} Report',
-                  style: const TextStyle(
-                    color: AppColors.gray,
-                    fontSize: 12,
-                  ),
+                  '${report.reportType == 'pitcher' ? 'Pitcher' : 'Hitter'} Report',
+                  style: const TextStyle(color: AppColors.gray, fontSize: 12),
                 ),
               ],
             ),
           ),
           Text(
-            report['date']!,
-            style: const TextStyle(
-              color: AppColors.gray,
-              fontSize: 12,
-            ),
+            _formatCreatedAt(report.createdAt),
+            style: const TextStyle(color: AppColors.gray, fontSize: 12),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildRecentUsers() {
-    final users = [
-      {'name': 'John Smith', 'email': 'john@example.com', 'premium': true},
-      {'name': 'Jane Doe', 'email': 'jane@example.com', 'premium': false},
-      {'name': 'Bob Wilson', 'email': 'bob@example.com', 'premium': true},
-      {'name': 'Sarah Miller', 'email': 'sarah@example.com', 'premium': false},
-      {'name': 'Tom Davis', 'email': 'tom@example.com', 'premium': true},
-    ];
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-        border: Border.all(color: AppColors.inputBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Recent Users',
-                style: TextStyle(
-                  color: AppColors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              TextButton(
-                onPressed: () => Get.toNamed('/users'),
-                child: const Text('View All'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...users.map((user) => _buildUserListItem(user)),
-        ],
-      ),
-    );
+    if (diff.inHours < 1) {
+      return '${diff.inMinutes}m ago';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours}h ago';
+    } else if (diff.inDays < 7) {
+      return '${diff.inDays}d ago';
+    } else {
+      return '${date.month}/${date.day}/${date.year}';
+    }
   }
 
-  Widget _buildUserListItem(Map<String, dynamic> user) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.inputBorder.withOpacity(0.5)),
-        ),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: AppColors.primary.withOpacity(0.2),
-            child: Text(
-              user['name']!.toString().substring(0, 1),
-              style: const TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  user['name']!,
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  user['email']!,
-                  style: const TextStyle(
-                    color: AppColors.gray,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (user['premium'] == true)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.premium.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.star, color: AppColors.premium, size: 12),
-                  SizedBox(width: 4),
-                  Text(
-                    'Premium',
-                    style: TextStyle(
-                      color: AppColors.premium,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
+  String _formatCreatedAt(String isoDate) {
+    try {
+      final date = DateTime.parse(isoDate);
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    } catch (_) {
+      return isoDate;
+    }
   }
 }

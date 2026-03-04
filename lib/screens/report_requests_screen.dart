@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../core/constants.dart';
 import '../widgets/admin_layout.dart';
 import '../models/report_request_model.dart';
+import '../services/report_service.dart';
 
 class ReportRequestsScreen extends StatefulWidget {
   const ReportRequestsScreen({super.key});
@@ -12,77 +13,13 @@ class ReportRequestsScreen extends StatefulWidget {
 }
 
 class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
+  final _reportService = ReportService();
   String _selectedFilter = 'All';
   final List<String> _filters = ['All', 'Pending', 'In Progress', 'Completed'];
 
-  // Sample data
-  final List<ReportRequestModel> _requests = [
-    ReportRequestModel(
-      id: '1',
-      userId: 'u1',
-      userName: 'John Smith',
-      userEmail: 'john@example.com',
-      playerId: 'p1',
-      playerName: 'Mike Johnson',
-      playerPosition: 'RHP',
-      reportType: 'pitcher',
-      status: 'Pending',
-      requestedAt: DateTime.now().subtract(const Duration(hours: 2)),
-    ),
-    ReportRequestModel(
-      id: '2',
-      userId: 'u2',
-      userName: 'Jane Doe',
-      userEmail: 'jane@example.com',
-      playerId: 'p2',
-      playerName: 'Chris Williams',
-      playerPosition: 'LF',
-      reportType: 'hitter',
-      status: 'In Progress',
-      requestedAt: DateTime.now().subtract(const Duration(hours: 5)),
-    ),
-    ReportRequestModel(
-      id: '3',
-      userId: 'u3',
-      userName: 'Bob Wilson',
-      userEmail: 'bob@example.com',
-      playerId: 'p3',
-      playerName: 'Alex Brown',
-      playerPosition: 'LHP',
-      reportType: 'pitcher',
-      status: 'Pending',
-      requestedAt: DateTime.now().subtract(const Duration(days: 1)),
-    ),
-    ReportRequestModel(
-      id: '4',
-      userId: 'u4',
-      userName: 'Sarah Miller',
-      userEmail: 'sarah@example.com',
-      playerId: 'p4',
-      playerName: 'David Lee',
-      playerPosition: 'CF',
-      reportType: 'hitter',
-      status: 'Completed',
-      requestedAt: DateTime.now().subtract(const Duration(days: 2)),
-      completedAt: DateTime.now().subtract(const Duration(days: 1)),
-    ),
-    ReportRequestModel(
-      id: '5',
-      userId: 'u5',
-      userName: 'Tom Davis',
-      userEmail: 'tom@example.com',
-      playerId: 'p5',
-      playerName: 'Ryan Garcia',
-      playerPosition: 'RHP',
-      reportType: 'pitcher',
-      status: 'Pending',
-      requestedAt: DateTime.now().subtract(const Duration(days: 3)),
-    ),
-  ];
-
-  List<ReportRequestModel> get _filteredRequests {
-    if (_selectedFilter == 'All') return _requests;
-    return _requests.where((r) => r.status == _selectedFilter).toList();
+  List<ReportRequestModel> _applyFilter(List<ReportRequestModel> requests) {
+    if (_selectedFilter == 'All') return requests;
+    return requests.where((r) => r.status == _selectedFilter).toList();
   }
 
   @override
@@ -92,120 +29,170 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
       title: 'Report Requests',
       child: Padding(
         padding: const EdgeInsets.all(AppConstants.paddingLarge),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Stats Row
-            Row(
+        child: StreamBuilder<List<ReportRequestModel>>(
+          stream: _reportService.streamReportRequests(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'Error loading requests: ${snapshot.error}',
+                  style: const TextStyle(color: AppColors.error),
+                ),
+              );
+            }
+
+            final allRequests = snapshot.data ?? [];
+            final filteredRequests = _applyFilter(allRequests);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildStatBadge(
-                  'Total',
-                  _requests.length,
-                  AppColors.info,
-                ),
-                const SizedBox(width: 12),
-                _buildStatBadge(
-                  'Pending',
-                  _requests.where((r) => r.status == 'Pending').length,
-                  AppColors.warning,
-                ),
-                const SizedBox(width: 12),
-                _buildStatBadge(
-                  'In Progress',
-                  _requests.where((r) => r.status == 'In Progress').length,
-                  AppColors.primary,
-                ),
-                const SizedBox(width: 12),
-                _buildStatBadge(
-                  'Completed',
-                  _requests.where((r) => r.status == 'Completed').length,
-                  AppColors.success,
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Filters
-            Row(
-              children: _filters.map((filter) {
-                final isSelected = _selectedFilter == filter;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(filter),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() => _selectedFilter = filter);
-                    },
-                    selectedColor: AppColors.primary.withOpacity(0.2),
-                    checkmarkColor: AppColors.primary,
-                    labelStyle: TextStyle(
-                      color: isSelected ? AppColors.primary : AppColors.gray,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                    backgroundColor: AppColors.card,
-                    side: BorderSide(
-                      color: isSelected ? AppColors.primary : AppColors.inputBorder,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Table
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-                  border: Border.all(color: AppColors.inputBorder),
-                ),
-                child: Column(
+                // Stats Row
+                Row(
                   children: [
-                    // Table Header
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: AppColors.sidebarBg,
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(AppConstants.radiusMedium),
-                          topRight: Radius.circular(AppConstants.radiusMedium),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          _buildHeaderCell('Player', flex: 2),
-                          _buildHeaderCell('Requested By', flex: 2),
-                          _buildHeaderCell('Type', flex: 1),
-                          _buildHeaderCell('Status', flex: 1),
-                          _buildHeaderCell('Requested', flex: 1),
-                          _buildHeaderCell('Actions', flex: 1),
-                        ],
-                      ),
+                    _buildStatBadge('Total', allRequests.length, AppColors.info),
+                    const SizedBox(width: 12),
+                    _buildStatBadge(
+                      'Pending',
+                      allRequests.where((r) => r.status == 'Pending').length,
+                      AppColors.warning,
                     ),
-
-                    // Table Body
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: _filteredRequests.length,
-                        separatorBuilder: (_, __) => const Divider(
-                          color: AppColors.inputBorder,
-                          height: 1,
-                        ),
-                        itemBuilder: (context, index) {
-                          final request = _filteredRequests[index];
-                          return _buildRequestRow(request);
-                        },
-                      ),
+                    const SizedBox(width: 12),
+                    _buildStatBadge(
+                      'In Progress',
+                      allRequests.where((r) => r.status == 'In Progress').length,
+                      AppColors.primary,
+                    ),
+                    const SizedBox(width: 12),
+                    _buildStatBadge(
+                      'Completed',
+                      allRequests.where((r) => r.status == 'Completed').length,
+                      AppColors.success,
                     ),
                   ],
                 ),
-              ),
-            ),
-          ],
+
+                const SizedBox(height: 24),
+
+                // Filters
+                Row(
+                  children: _filters.map((filter) {
+                    final isSelected = _selectedFilter == filter;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(filter),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() => _selectedFilter = filter);
+                        },
+                        selectedColor: AppColors.primary.withOpacity(0.2),
+                        checkmarkColor: AppColors.primary,
+                        labelStyle: TextStyle(
+                          color: isSelected ? AppColors.primary : AppColors.gray,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                        backgroundColor: AppColors.card,
+                        side: BorderSide(
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.inputBorder,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Table
+                Expanded(
+                  child: filteredRequests.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.inbox_outlined,
+                                  size: 64,
+                                  color: AppColors.gray.withOpacity(0.5)),
+                              const SizedBox(height: 16),
+                              Text(
+                                _selectedFilter == 'All'
+                                    ? 'No report requests yet'
+                                    : 'No $_selectedFilter requests',
+                                style: const TextStyle(
+                                    color: AppColors.gray, fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(
+                                AppConstants.radiusMedium),
+                            border:
+                                Border.all(color: AppColors.inputBorder),
+                          ),
+                          child: Column(
+                            children: [
+                              // Table Header
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 16),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.sidebarBg,
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: Radius.circular(
+                                        AppConstants.radiusMedium),
+                                    topRight: Radius.circular(
+                                        AppConstants.radiusMedium),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    _buildHeaderCell('Player', flex: 2),
+                                    _buildHeaderCell('Requested By',
+                                        flex: 2),
+                                    _buildHeaderCell('Type', flex: 1),
+                                    _buildHeaderCell('Status', flex: 1),
+                                    _buildHeaderCell('Requested',
+                                        flex: 1),
+                                    _buildHeaderCell('Actions', flex: 1),
+                                  ],
+                                ),
+                              ),
+
+                              // Table Body
+                              Expanded(
+                                child: ListView.separated(
+                                  itemCount: filteredRequests.length,
+                                  separatorBuilder: (_, __) =>
+                                      const Divider(
+                                    color: AppColors.inputBorder,
+                                    height: 1,
+                                  ),
+                                  itemBuilder: (context, index) {
+                                    final request =
+                                        filteredRequests[index];
+                                    return _buildRequestRow(request);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -232,10 +219,7 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
           const SizedBox(width: 8),
           Text(
             label,
-            style: TextStyle(
-              color: color,
-              fontSize: 14,
-            ),
+            style: TextStyle(color: color, fontSize: 14),
           ),
         ],
       ),
@@ -326,16 +310,12 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
               children: [
                 Text(
                   request.userName,
-                  style: const TextStyle(
-                    color: AppColors.white,
-                  ),
+                  style: const TextStyle(color: AppColors.white),
                 ),
                 Text(
                   request.userEmail,
                   style: const TextStyle(
-                    color: AppColors.gray,
-                    fontSize: 12,
-                  ),
+                      color: AppColors.gray, fontSize: 12),
                 ),
               ],
             ),
@@ -345,7 +325,8 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
           Expanded(
             flex: 1,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: typeColor.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(4),
@@ -366,7 +347,8 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
           Expanded(
             flex: 1,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: statusColor.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(4),
@@ -388,10 +370,7 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
             flex: 1,
             child: Text(
               _formatDate(request.requestedAt),
-              style: const TextStyle(
-                color: AppColors.gray,
-                fontSize: 13,
-              ),
+              style: const TextStyle(color: AppColors.gray, fontSize: 13),
             ),
           ),
 
@@ -403,11 +382,12 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
                 if (request.status != 'Completed') ...[
                   IconButton(
                     onPressed: () {
-                      // Navigate to create report
                       if (request.reportType == 'pitcher') {
-                        Get.toNamed('/report/pitcher', arguments: request);
+                        Get.toNamed('/report/pitcher',
+                            arguments: request);
                       } else {
-                        Get.toNamed('/report/hitter', arguments: request);
+                        Get.toNamed('/report/hitter',
+                            arguments: request);
                       }
                     },
                     icon: const Icon(Icons.edit_outlined, size: 18),
@@ -422,8 +402,13 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
                   ),
                 ] else ...[
                   IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.visibility_outlined, size: 18),
+                    onPressed: () {
+                      if (request.assignedReportId != null) {
+                        Get.toNamed('/reports');
+                      }
+                    },
+                    icon:
+                        const Icon(Icons.visibility_outlined, size: 18),
                     tooltip: 'View Report',
                     color: AppColors.gray,
                   ),
@@ -475,17 +460,29 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
                 leading: Radio<String>(
                   value: status,
                   groupValue: request.status,
-                  onChanged: (value) {
+                  onChanged: (value) async {
                     Navigator.pop(context);
-                    setState(() {
-                      // Update status logic would go here
-                    });
-                    Get.snackbar(
-                      'Status Updated',
-                      'Request status updated to $value',
-                      backgroundColor: AppColors.success,
-                      colorText: AppColors.white,
-                    );
+                    if (value != null && value != request.status) {
+                      try {
+                        await _reportService.updateRequestStatus(
+                          request.id,
+                          value,
+                        );
+                        Get.snackbar(
+                          'Status Updated',
+                          'Request status updated to $value',
+                          backgroundColor: AppColors.success,
+                          colorText: AppColors.white,
+                        );
+                      } catch (e) {
+                        Get.snackbar(
+                          'Error',
+                          'Failed to update status',
+                          backgroundColor: AppColors.error,
+                          colorText: AppColors.white,
+                        );
+                      }
+                    }
                   },
                   activeColor: AppColors.primary,
                 ),

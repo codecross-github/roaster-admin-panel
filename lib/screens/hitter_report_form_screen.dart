@@ -6,30 +6,28 @@ import 'dart:math' as math;
 import '../core/constants.dart';
 import '../widgets/admin_layout.dart';
 import '../widgets/player_photo_upload.dart';
+import '../models/report_model.dart';
+import '../models/report_request_model.dart';
+import '../services/report_service.dart';
 
 class HitterReportFormScreen extends StatefulWidget {
   const HitterReportFormScreen({super.key});
 
   @override
-  State<HitterReportFormScreen> createState() => _HitterReportFormScreenState();
+  State<HitterReportFormScreen> createState() =>
+      _HitterReportFormScreenState();
 }
 
 class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _reportService = ReportService();
+  bool _isSaving = false;
 
-  // User Search
-  final _userSearchController = TextEditingController();
+  // Request data (if navigated from a report request)
+  ReportRequestModel? _fromRequest;
+
+  // User info
   String? _selectedUserId;
-  String? _selectedUserName;
-
-  // Sample users for search
-  final List<Map<String, String>> _users = [
-    {'id': '1', 'name': 'John Smith', 'email': 'john@example.com'},
-    {'id': '2', 'name': 'Jane Doe', 'email': 'jane@example.com'},
-    {'id': '3', 'name': 'Bob Wilson', 'email': 'bob@example.com'},
-    {'id': '4', 'name': 'Sarah Miller', 'email': 'sarah@example.com'},
-    {'id': '5', 'name': 'Tom Davis', 'email': 'tom@example.com'},
-  ];
 
   // Player Info
   final _playerNameController = TextEditingController();
@@ -56,11 +54,63 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
 
   // Videos (2 videos)
   String? _videoFileName1;
+  Uint8List? _videoBytes1;
   String? _videoFileName2;
+  Uint8List? _videoBytes2;
+
+  // Zone Heatmap data (3x3 grids, values 0.0-1.0)
+  final List<List<double>> _zoneVsLHP = [
+    [0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0],
+  ];
+  final List<List<double>> _zoneVsRHP = [
+    [0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0],
+  ];
+
+  // Spray chart points
+  final List<SprayChartPoint> _sprayChartPoints = [];
+
+  static const _validHitterPositions = [
+    'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'
+  ];
+
+  /// Normalize a position string to one the hitter dropdown accepts.
+  /// Handles abbreviations like "OF", "IF", "Outfielder", etc.
+  String _normalizeHitterPosition(String pos) {
+    const mappings = {
+      'OF': 'CF', 'OUTFIELD': 'CF', 'OUTFIELDER': 'CF',
+      'LF': 'LF', 'RF': 'RF', 'CF': 'CF',
+      'IF': '2B', 'INFIELD': '2B', 'INFIELDER': '2B',
+      '1B': '1B', '2B': '2B', '3B': '3B', 'SS': 'SS',
+      'C': 'C', 'CATCHER': 'C',
+      'DH': 'DH', 'DESIGNATED HITTER': 'DH',
+    };
+    final normalized = mappings[pos.toUpperCase()];
+    if (normalized != null) return normalized;
+    // If it already matches a valid position, keep it
+    if (_validHitterPositions.contains(pos)) return pos;
+    // Default fallback
+    return 'CF';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if navigated from a report request
+    final args = Get.arguments;
+    if (args is ReportRequestModel) {
+      _fromRequest = args;
+      _playerNameController.text = args.playerName;
+      _selectedPosition = _normalizeHitterPosition(args.playerPosition);
+      _selectedUserId = args.userId;
+    }
+  }
 
   @override
   void dispose() {
-    _userSearchController.dispose();
     _playerNameController.dispose();
     _airPullController.dispose();
     _chaseController.dispose();
@@ -78,18 +128,27 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
   Widget build(BuildContext context) {
     return AdminLayout(
       currentIndex: 4,
-      title: 'New Hitter Report',
+      title: _fromRequest != null
+          ? 'Report for ${_fromRequest!.playerName}'
+          : 'New Hitter Report',
       actions: [
         OutlinedButton.icon(
-          onPressed: () => Get.back(),
+          onPressed: _isSaving ? null : () => Get.back(),
           icon: const Icon(Icons.close, size: 18),
           label: const Text('Cancel'),
         ),
         const SizedBox(width: 12),
         ElevatedButton.icon(
-          onPressed: _saveReport,
-          icon: const Icon(Icons.save_outlined, size: 18),
-          label: const Text('Save Report'),
+          onPressed: _isSaving ? null : _saveReport,
+          icon: _isSaving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.white),
+                )
+              : const Icon(Icons.save_outlined, size: 18),
+          label: Text(_isSaving ? 'Saving...' : 'Save Report'),
         ),
       ],
       child: SingleChildScrollView(
@@ -104,12 +163,51 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                 flex: 2,
                 child: Column(
                   children: [
-                    // User Search Card
-                    _buildCard(
-                      title: 'Assign to User',
-                      subtitle: 'Search for the user who requested this report',
-                      child: _buildUserSearch(),
-                    ),
+                    // User Info Card
+                    if (_fromRequest != null)
+                      _buildCard(
+                        title: 'Assigned to User',
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: AppColors.success.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle,
+                                  color: AppColors.success, size: 20),
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Assigned to: ${_fromRequest!.userName}',
+                                    style: const TextStyle(
+                                        color: AppColors.success,
+                                        fontWeight: FontWeight.w500),
+                                  ),
+                                  Text(
+                                    _fromRequest!.userEmail,
+                                    style: const TextStyle(
+                                        color: AppColors.gray,
+                                        fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      _buildCard(
+                        title: 'Assign to User',
+                        subtitle: 'Enter the user ID for this report',
+                        child: _buildUserIdInput(),
+                      ),
 
                     const SizedBox(height: 20),
 
@@ -131,8 +229,12 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                             child: _buildDropdown(
                               label: 'Position',
                               value: _selectedPosition,
-                              items: ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'],
-                              onChanged: (v) => setState(() => _selectedPosition = v!),
+                              items: [
+                                'C', '1B', '2B', '3B', 'SS', 'LF', 'CF',
+                                'RF', 'DH'
+                              ],
+                              onChanged: (v) =>
+                                  setState(() => _selectedPosition = v!),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -141,7 +243,8 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                               label: 'Bats',
                               value: _selectedBats,
                               items: AppConstants.batsOptions,
-                              onChanged: (v) => setState(() => _selectedBats = v!),
+                              onChanged: (v) =>
+                                  setState(() => _selectedBats = v!),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -150,7 +253,8 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                               label: 'Throws',
                               value: _selectedThrows,
                               items: AppConstants.throwsOptions,
-                              onChanged: (v) => setState(() => _selectedThrows = v!),
+                              onChanged: (v) =>
+                                  setState(() => _selectedThrows = v!),
                             ),
                           ),
                         ],
@@ -166,25 +270,42 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                         children: [
                           Row(
                             children: [
-                              Expanded(child: _buildStatInput('Airpull%', _airPullController)),
+                              Expanded(
+                                  child: _buildStatInput(
+                                      'Airpull%', _airPullController)),
                               const SizedBox(width: 16),
-                              Expanded(child: _buildStatInput('Chase%', _chaseController)),
+                              Expanded(
+                                  child: _buildStatInput(
+                                      'Chase%', _chaseController)),
                               const SizedBox(width: 16),
-                              Expanded(child: _buildStatInput('90th RV', _ninetiethRVController)),
+                              Expanded(
+                                  child: _buildStatInput(
+                                      '90th RV', _ninetiethRVController)),
                               const SizedBox(width: 16),
-                              Expanded(child: _buildStatInput('BB%', _bbController)),
+                              Expanded(
+                                  child: _buildStatInput(
+                                      'BB%', _bbController)),
                             ],
                           ),
                           const SizedBox(height: 16),
                           Row(
                             children: [
-                              Expanded(child: _buildStatInput('Miss%', _missController)),
+                              Expanded(
+                                  child: _buildStatInput(
+                                      'Miss%', _missController)),
                               const SizedBox(width: 16),
-                              Expanded(child: _buildStatInput('K%', _kController)),
+                              Expanded(
+                                  child: _buildStatInput(
+                                      'K%', _kController)),
                               const SizedBox(width: 16),
-                              Expanded(child: _buildStatInput('Exit Velo', _exitVeloController)),
+                              Expanded(
+                                  child: _buildStatInput(
+                                      'Exit Velo', _exitVeloController)),
                               const SizedBox(width: 16),
-                              Expanded(child: _buildStatInput('Batting Avg', _battingAvgController)),
+                              Expanded(
+                                  child: _buildStatInput(
+                                      'Batting Avg',
+                                      _battingAvgController)),
                             ],
                           ),
                         ],
@@ -196,15 +317,18 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                     // Game Footage - 2 Videos
                     _buildCard(
                       title: 'Game Footage',
-                      subtitle: 'Upload 2 video clips',
+                      subtitle: 'Upload up to 2 video clips',
                       child: Row(
                         children: [
                           Expanded(
                             child: _buildVideoUpload(
                               label: 'Video 1',
                               fileName: _videoFileName1,
-                              onPick: () => setState(() => _videoFileName1 = 'hitter_clip_1.mp4'),
-                              onRemove: () => setState(() => _videoFileName1 = null),
+                              onPick: () => _pickVideoFile(1),
+                              onRemove: () => setState(() {
+                                _videoFileName1 = null;
+                                _videoBytes1 = null;
+                              }),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -212,8 +336,11 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                             child: _buildVideoUpload(
                               label: 'Video 2',
                               fileName: _videoFileName2,
-                              onPick: () => setState(() => _videoFileName2 = 'hitter_clip_2.mp4'),
-                              onRemove: () => setState(() => _videoFileName2 = null),
+                              onPick: () => _pickVideoFile(2),
+                              onRemove: () => setState(() {
+                                _videoFileName2 = null;
+                                _videoBytes2 = null;
+                              }),
                             ),
                           ),
                         ],
@@ -242,22 +369,38 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
 
                     const SizedBox(height: 20),
 
-                    // Graphics Section - 2 Graphics (Spray Chart + Zone Heatmap)
+                    // Spray Chart
                     _buildCard(
                       title: 'Spray Chart',
+                      subtitle: 'Click on chart to add hit data points (${_sprayChartPoints.length} points)',
+                      action: _sprayChartPoints.isNotEmpty
+                          ? TextButton.icon(
+                              onPressed: () => setState(() => _sprayChartPoints.clear()),
+                              icon: const Icon(Icons.clear_all, size: 16),
+                              label: const Text('Clear'),
+                            )
+                          : null,
                       child: Column(
                         children: [
                           _buildSprayChartFan(),
                           const SizedBox(height: 12),
-                          // Legend
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _buildLegendItem(const Color(0xFF3B82F6), 'Low'),
-                              const SizedBox(width: 16),
-                              _buildLegendItem(const Color(0xFF22C55E), 'Medium'),
-                              const SizedBox(width: 16),
-                              _buildLegendItem(const Color(0xFFEF4444), 'High'),
+                              _buildLegendItem(
+                                  const Color(0xFF22C55E), 'Single'),
+                              const SizedBox(width: 8),
+                              _buildLegendItem(
+                                  const Color(0xFFEAB308), 'Double'),
+                              const SizedBox(width: 8),
+                              _buildLegendItem(
+                                  const Color(0xFFF97316), 'Triple'),
+                              const SizedBox(width: 8),
+                              _buildLegendItem(
+                                  const Color(0xFFEF4444), 'HR'),
+                              const SizedBox(width: 8),
+                              _buildLegendItem(
+                                  const Color(0xFF6B7280), 'Out'),
                             ],
                           ),
                         ],
@@ -269,6 +412,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                     // Zone Heatmap
                     _buildCard(
                       title: 'Zone Heatmap',
+                      subtitle: 'Click cells to set probability values (0.0 – 1.0)',
                       child: Column(
                         children: [
                           _buildZoneHeatmap(),
@@ -276,11 +420,14 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _buildLegendItem(const Color(0xFF3B82F6), 'Low'),
+                              _buildLegendItem(
+                                  const Color(0xFF1E40AF), 'Cold'),
                               const SizedBox(width: 16),
-                              _buildLegendItem(const Color(0xFF22C55E), 'Medium'),
+                              _buildLegendItem(
+                                  const Color(0xFF22C55E), 'Warm'),
                               const SizedBox(width: 16),
-                              _buildLegendItem(const Color(0xFFEF4444), 'High'),
+                              _buildLegendItem(
+                                  const Color(0xFFEF4444), 'Hot'),
                             ],
                           ),
                         ],
@@ -311,92 +458,22 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     );
   }
 
-  Widget _buildUserSearch() {
+  Widget _buildUserIdInput() {
+    final controller = TextEditingController(text: _selectedUserId ?? '');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Search Field
-        Autocomplete<Map<String, String>>(
-          optionsBuilder: (TextEditingValue textEditingValue) {
-            if (textEditingValue.text.isEmpty) {
-              return const Iterable<Map<String, String>>.empty();
-            }
-            return _users.where((user) =>
-                user['name']!.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                user['email']!.toLowerCase().contains(textEditingValue.text.toLowerCase()));
-          },
-          displayStringForOption: (user) => user['name']!,
-          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-            return TextField(
-              controller: controller,
-              focusNode: focusNode,
-              style: const TextStyle(color: AppColors.white),
-              decoration: InputDecoration(
-                hintText: 'Search by user name...',
-                prefixIcon: const Icon(Icons.search, color: AppColors.gray),
-                suffixIcon: _selectedUserId != null
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: AppColors.gray),
-                        onPressed: () {
-                          controller.clear();
-                          setState(() {
-                            _selectedUserId = null;
-                            _selectedUserName = null;
-                          });
-                        },
-                      )
-                    : null,
-              ),
-            );
-          },
-          optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                color: AppColors.card,
-                elevation: 4,
-                borderRadius: BorderRadius.circular(8),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 200, maxWidth: 400),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      final user = options.elementAt(index);
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.primary.withOpacity(0.2),
-                          child: Text(
-                            user['name']![0],
-                            style: const TextStyle(color: AppColors.primary),
-                          ),
-                        ),
-                        title: Text(user['name']!, style: const TextStyle(color: AppColors.white)),
-                        subtitle: Text(user['email']!, style: const TextStyle(color: AppColors.gray, fontSize: 12)),
-                        onTap: () {
-                          onSelected(user);
-                          setState(() {
-                            _selectedUserId = user['id'];
-                            _selectedUserName = user['name'];
-                          });
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-          onSelected: (user) {
-            setState(() {
-              _selectedUserId = user['id'];
-              _selectedUserName = user['name'];
-            });
+        TextField(
+          controller: controller,
+          style: const TextStyle(color: AppColors.white),
+          decoration: const InputDecoration(
+            hintText: 'Enter User ID...',
+            prefixIcon: Icon(Icons.person_search, color: AppColors.gray),
+          ),
+          onChanged: (value) {
+            _selectedUserId = value.trim().isEmpty ? null : value.trim();
           },
         ),
-
-        // Selected User Display
         if (_selectedUserId != null) ...[
           const SizedBox(height: 12),
           Container(
@@ -404,15 +481,19 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
             decoration: BoxDecoration(
               color: AppColors.success.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.success.withOpacity(0.3)),
+              border:
+                  Border.all(color: AppColors.success.withOpacity(0.3)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                const Icon(Icons.check_circle,
+                    color: AppColors.success, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'Assigned to: $_selectedUserName',
-                  style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w500),
+                  'User ID: $_selectedUserId',
+                  style: const TextStyle(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -455,7 +536,8 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                   if (subtitle != null)
                     Text(
                       subtitle,
-                      style: const TextStyle(color: AppColors.gray, fontSize: 12),
+                      style: const TextStyle(
+                          color: AppColors.gray, fontSize: 12),
                     ),
                 ],
               ),
@@ -477,7 +559,8 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppColors.gray, fontSize: 13)),
+        Text(label,
+            style: const TextStyle(color: AppColors.gray, fontSize: 13)),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
@@ -498,11 +581,14 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppColors.gray, fontSize: 13)),
+        Text(label,
+            style: const TextStyle(color: AppColors.gray, fontSize: 13)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: value,
-          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+          items: items
+              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+              .toList(),
           onChanged: onChanged,
           dropdownColor: AppColors.card,
           style: const TextStyle(color: AppColors.white),
@@ -515,15 +601,18 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppColors.gray, fontSize: 12)),
+        Text(label,
+            style: const TextStyle(color: AppColors.gray, fontSize: 12)),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
           keyboardType: TextInputType.number,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+              color: AppColors.white, fontWeight: FontWeight.bold),
           decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             filled: true,
             fillColor: AppColors.sidebarBg,
           ),
@@ -532,40 +621,193 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     );
   }
 
-  // Spray Chart Fan - same as main app
+  // Spray Chart Fan — interactive: click to add data points
   Widget _buildSprayChartFan() {
-    return Container(
-      height: 180,
-      decoration: BoxDecoration(
-        color: AppColors.sidebarBg,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: CustomPaint(
-          size: const Size(double.infinity, 180),
-          painter: SprayChartPainter(),
+    return GestureDetector(
+      onTapDown: (details) {
+        final RenderBox box = context.findRenderObject() as RenderBox;
+        final localPos = box.globalToLocal(details.globalPosition);
+        // Normalize to -100..100 range
+        final x = ((localPos.dx / box.size.width) * 200) - 100;
+        final y = 100 - ((localPos.dy / box.size.height) * 200);
+        _addSprayChartPoint(x, y);
+      },
+      child: Container(
+        height: 180,
+        decoration: BoxDecoration(
+          color: AppColors.sidebarBg,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: CustomPaint(
+            size: const Size(double.infinity, 180),
+            painter: SprayChartPainter(points: _sprayChartPoints),
+          ),
         ),
       ),
     );
   }
 
-  // Zone Heatmap - same as main app
+  void _addSprayChartPoint(double x, double y) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        String selectedHitType = 'single';
+        return AlertDialog(
+          backgroundColor: AppColors.card,
+          title: const Text('Add Hit', style: TextStyle(color: AppColors.white)),
+          content: StatefulBuilder(
+            builder: (ctx, setDialogState) {
+              return DropdownButton<String>(
+                value: selectedHitType,
+                dropdownColor: AppColors.card,
+                style: const TextStyle(color: AppColors.white),
+                isExpanded: true,
+                items: ['single', 'double', 'triple', 'homerun', 'out']
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (v) => setDialogState(() => selectedHitType = v!),
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _sprayChartPoints.add(SprayChartPoint(
+                    x: x, y: y, hitType: selectedHitType,
+                  ));
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Zone Heatmap — interactive: editable 3×3 grid
   Widget _buildZoneHeatmap() {
+    return Column(
+      children: [
+        // vs LHP
+        const Text('vs LHP', style: TextStyle(color: AppColors.gray, fontSize: 12)),
+        const SizedBox(height: 4),
+        _buildZoneGrid(_zoneVsLHP),
+        const SizedBox(height: 12),
+        // vs RHP
+        const Text('vs RHP', style: TextStyle(color: AppColors.gray, fontSize: 12)),
+        const SizedBox(height: 4),
+        _buildZoneGrid(_zoneVsRHP),
+      ],
+    );
+  }
+
+  Widget _buildZoneGrid(List<List<double>> zones) {
     return Container(
-      height: 160,
       decoration: BoxDecoration(
-        color: AppColors.sidebarBg,
-        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.inputBorder),
-      ),
-      child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: CustomPaint(
-          size: const Size(double.infinity, 160),
-          painter: ZoneHeatmapPainter(),
-        ),
       ),
+      child: Column(
+        children: List.generate(3, (row) {
+          return Row(
+            children: List.generate(3, (col) {
+              final value = zones[row][col];
+              final color = _getHeatColor(value);
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => _editZoneValue(zones, row, col),
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: color,
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        value.toStringAsFixed(2),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          );
+        }),
+      ),
+    );
+  }
+
+  Color _getHeatColor(double value) {
+    if (value < 0.33) {
+      return Color.lerp(
+        const Color(0xFF1E40AF), const Color(0xFF06B6D4), value / 0.33,
+      )!;
+    } else if (value < 0.66) {
+      return Color.lerp(
+        const Color(0xFF06B6D4), const Color(0xFF22C55E), (value - 0.33) / 0.33,
+      )!;
+    } else {
+      return Color.lerp(
+        const Color(0xFFEAB308), const Color(0xFFEF4444), (value - 0.66) / 0.34,
+      )!;
+    }
+  }
+
+  void _editZoneValue(List<List<double>> zones, int row, int col) {
+    final controller = TextEditingController(
+      text: zones[row][col].toStringAsFixed(2),
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.card,
+          title: const Text(
+            'Set Zone Value (0.0 – 1.0)',
+            style: TextStyle(color: AppColors.white, fontSize: 14),
+          ),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(color: AppColors.white),
+            decoration: const InputDecoration(hintText: '0.00 – 1.00'),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final val = double.tryParse(controller.text) ?? 0.0;
+                setState(() {
+                  zones[row][col] = val.clamp(0.0, 1.0);
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Set'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -578,26 +820,32 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppColors.gray, fontSize: 12)),
+        Text(label,
+            style: const TextStyle(color: AppColors.gray, fontSize: 12)),
         const SizedBox(height: 8),
         Container(
           height: 100,
           decoration: BoxDecoration(
             color: AppColors.sidebarBg,
-            borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+            borderRadius:
+                BorderRadius.circular(AppConstants.radiusSmall),
             border: Border.all(color: AppColors.inputBorder),
           ),
           child: fileName == null
               ? InkWell(
                   onTap: onPick,
-                  borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                  borderRadius:
+                      BorderRadius.circular(AppConstants.radiusSmall),
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.cloud_upload_outlined, size: 28, color: AppColors.gray),
+                        Icon(Icons.cloud_upload_outlined,
+                            size: 28, color: AppColors.gray),
                         const SizedBox(height: 4),
-                        const Text('Upload', style: TextStyle(color: AppColors.gray, fontSize: 12)),
+                        const Text('Upload',
+                            style: TextStyle(
+                                color: AppColors.gray, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -608,11 +856,13 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.videocam_outlined, size: 28, color: AppColors.success),
+                          const Icon(Icons.videocam_outlined,
+                              size: 28, color: AppColors.success),
                           const SizedBox(height: 4),
                           Text(
                             fileName,
-                            style: const TextStyle(color: AppColors.white, fontSize: 10),
+                            style: const TextStyle(
+                                color: AppColors.white, fontSize: 10),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
@@ -694,17 +944,130 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     });
   }
 
-  void _saveReport() {
-    if (_formKey.currentState!.validate()) {
-      if (_selectedUserId == null) {
+  Future<void> _pickVideoFile(int videoNumber) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.video,
+      allowMultiple: false,
+      withData: true,
+    );
+
+    if (result != null && result.files.isNotEmpty) {
+      final file = result.files.first;
+
+      if (file.size > 100 * 1024 * 1024) {
         Get.snackbar(
           'Error',
-          'Please select a user to assign this report to',
+          'Video must be under 100MB',
           backgroundColor: AppColors.error,
           colorText: AppColors.white,
         );
         return;
       }
+
+      setState(() {
+        if (videoNumber == 1) {
+          _videoFileName1 = file.name;
+          _videoBytes1 = file.bytes;
+        } else {
+          _videoFileName2 = file.name;
+          _videoBytes2 = file.bytes;
+        }
+      });
+    }
+  }
+
+  Future<void> _saveReport() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedUserId == null || _selectedUserId!.isEmpty) {
+      Get.snackbar(
+        'Error',
+        'Please assign this report to a user',
+        backgroundColor: AppColors.error,
+        colorText: AppColors.white,
+      );
+      return;
+    }
+
+    if (_playerImageBytes == null) {
+      Get.snackbar(
+        'Error',
+        'Player photo is required. Please upload a player image.',
+        backgroundColor: AppColors.error,
+        colorText: AppColors.white,
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      // 1. Upload player image (mandatory)
+      final playerImageUrl = await _reportService.uploadImage(
+          _playerImageBytes!, _playerImageFileName!);
+
+      // 2. Upload video 1 if present
+      String? videoUrl;
+      if (_videoBytes1 != null && _videoFileName1 != null) {
+        videoUrl = await _reportService.uploadVideo(
+            _videoBytes1!, _videoFileName1!);
+      }
+
+      // 3. Upload video 2 if present
+      String? videoUrl2;
+      if (_videoBytes2 != null && _videoFileName2 != null) {
+        videoUrl2 = await _reportService.uploadVideo(
+            _videoBytes2!, _videoFileName2!);
+      }
+
+      // 4. Build hitter stats
+      final hitterStats = HitterStats(
+        airPullPct:
+            double.tryParse(_airPullController.text) ?? 0.0,
+        chasePct:
+            double.tryParse(_chaseController.text) ?? 0.0,
+        ninetiethRV:
+            double.tryParse(_ninetiethRVController.text) ?? 0.0,
+        bbPct: double.tryParse(_bbController.text) ?? 0.0,
+        missPct: double.tryParse(_missController.text) ?? 0.0,
+        kPct: double.tryParse(_kController.text) ?? 0.0,
+        exitVelocity:
+            double.tryParse(_exitVeloController.text) ?? 0.0,
+        battingAverage:
+            double.tryParse(_battingAvgController.text) ?? 0.0,
+      );
+
+      // 5. Build the report model
+      final report = ReportModel.hitter(
+        id: '',
+        playerId: _fromRequest?.playerId ?? '',
+        playerName: _playerNameController.text.trim(),
+        position: _selectedPosition,
+        throwsHand: _selectedThrows,
+        createdAt: DateTime.now().toIso8601String(),
+        videoUrl: videoUrl,
+        videoUrl2: videoUrl2,
+        playerImageUrl: playerImageUrl,
+        scoutSummary: _scoutSummaryController.text.trim(),
+        requestId: _fromRequest?.id,
+        userId: _selectedUserId,
+        hitterStats: hitterStats,
+        sprayChartPoints: List<SprayChartPoint>.from(_sprayChartPoints),
+        zoneVsLHP: ZoneHeatmap(zones: _zoneVsLHP.map((r) => List<double>.from(r)).toList()),
+        zoneVsRHP: ZoneHeatmap(zones: _zoneVsRHP.map((r) => List<double>.from(r)).toList()),
+      );
+
+      // 6. Save to Firestore
+      final reportId = await _reportService.createReport(report);
+
+      // 7. If from request, link report to request and mark completed
+      if (_fromRequest != null) {
+        await _reportService.linkReportToRequest(
+          _fromRequest!.id,
+          reportId,
+        );
+      }
+
       Get.snackbar(
         'Success',
         'Hitter report saved successfully',
@@ -712,58 +1075,55 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
         colorText: AppColors.white,
       );
       Get.offAllNamed('/reports');
+    } catch (e) {
+      debugPrint('Error saving hitter report: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to save report. Please try again.',
+        backgroundColor: AppColors.error,
+        colorText: AppColors.white,
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 }
 
-// Custom painter for the spray chart fan shape - same as main app
+// Custom painter for the spray chart fan shape with data points
 class SprayChartPainter extends CustomPainter {
+  final List<SprayChartPoint> points;
+
+  SprayChartPainter({required this.points});
+
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height + 20);
     final radius = size.height + 10;
 
-    // Define the colors for the fan sections (from left to right)
-    final colors = [
-      const Color(0xFF1E40AF), // Dark blue
-      const Color(0xFF3B82F6), // Blue
-      const Color(0xFF06B6D4), // Cyan
-      const Color(0xFF22C55E), // Green
-      const Color(0xFFEAB308), // Yellow
-      const Color(0xFFF97316), // Orange
-      const Color(0xFFEF4444), // Red
-      const Color(0xFFDC2626), // Dark red
-    ];
+    // Draw field background (green gradient)
+    final fieldPaint = Paint()
+      ..color = const Color(0xFF1B4332)
+      ..style = PaintingStyle.fill;
 
-    // Draw fan sections
-    const startAngle = -math.pi; // -180 degrees (left)
-    final sweepAngle = math.pi / colors.length; // Divide 180 degrees by number of colors
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi,
+      math.pi,
+      true,
+      fieldPaint,
+    );
 
-    for (int i = 0; i < colors.length; i++) {
-      final paint = Paint()
-        ..color = colors[i]
-        ..style = PaintingStyle.fill;
-
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle + (i * sweepAngle),
-        sweepAngle,
-        true,
-        paint,
-      );
-    }
-
-    // Draw inner rings with varying opacity
+    // Draw inner rings
     for (int ring = 1; ring <= 4; ring++) {
       final ringRadius = radius * (1 - ring * 0.2);
       final ringPaint = Paint()
-        ..color = Colors.black.withOpacity(0.1)
+        ..color = Colors.white.withOpacity(0.15)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1;
 
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: ringRadius),
-        startAngle,
+        -math.pi,
         math.pi,
         false,
         ringPaint,
@@ -771,10 +1131,10 @@ class SprayChartPainter extends CustomPainter {
     }
 
     // Draw radial lines
-    for (int i = 1; i < colors.length; i++) {
-      final angle = startAngle + (i * sweepAngle);
+    for (int i = 1; i < 8; i++) {
+      final angle = -math.pi + (i * math.pi / 8);
       final linePaint = Paint()
-        ..color = Colors.black.withOpacity(0.2)
+        ..color = Colors.white.withOpacity(0.1)
         ..strokeWidth = 1;
 
       final endPoint = Offset(
@@ -784,75 +1144,36 @@ class SprayChartPainter extends CustomPainter {
 
       canvas.drawLine(center, endPoint, linePaint);
     }
-  }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
+    // Draw data points
+    final hitColors = {
+      'single': const Color(0xFF22C55E),
+      'double': const Color(0xFFEAB308),
+      'triple': const Color(0xFFF97316),
+      'homerun': const Color(0xFFEF4444),
+      'out': const Color(0xFF6B7280),
+    };
 
-// Custom painter for zone heatmap - same as main app
-class ZoneHeatmapPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height + 10);
-    final radius = size.height;
+    for (final point in points) {
+      final px = center.dx + (point.x / 100) * radius;
+      final py = center.dy - (point.y / 100) * radius;
 
-    // Define the colors for the heatmap sections
-    final colors = [
-      const Color(0xFF1E40AF), // Dark blue
-      const Color(0xFF3B82F6), // Blue
-      const Color(0xFF06B6D4), // Cyan
-      const Color(0xFF22C55E), // Green
-      const Color(0xFFEAB308), // Yellow
-      const Color(0xFFF97316), // Orange
-      const Color(0xFFEF4444), // Red
-    ];
-
-    // Draw fan sections
-    const startAngle = -math.pi;
-    final sweepAngle = math.pi / colors.length;
-
-    for (int i = 0; i < colors.length; i++) {
-      final paint = Paint()
-        ..color = colors[i]
+      final dotPaint = Paint()
+        ..color = hitColors[point.hitType] ?? Colors.white
         ..style = PaintingStyle.fill;
 
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle + (i * sweepAngle),
-        sweepAngle,
-        true,
-        paint,
-      );
-    }
+      canvas.drawCircle(Offset(px, py), 5, dotPaint);
 
-    // Draw grid overlay
-    final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-
-    // Horizontal lines
-    for (int i = 1; i <= 3; i++) {
-      final y = size.height - (i * size.height / 4);
-      canvas.drawLine(
-        Offset(0, y),
-        Offset(size.width, y),
-        gridPaint,
-      );
-    }
-
-    // Vertical lines
-    for (int i = 1; i <= 3; i++) {
-      final x = i * size.width / 4;
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
-        gridPaint,
-      );
+      // White border
+      final borderPaint = Paint()
+        ..color = Colors.white.withOpacity(0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1;
+      canvas.drawCircle(Offset(px, py), 5, borderPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant SprayChartPainter oldDelegate) =>
+      oldDelegate.points.length != points.length;
 }
