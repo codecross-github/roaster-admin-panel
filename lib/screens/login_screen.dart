@@ -25,6 +25,13 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _emailController.text = 'admin@rosterradar.com';
+    _passwordController.text = 'admin123';
+  }
+
   void _handleLogin() {
     if (_formKey.currentState!.validate()) {
       _authController.login(

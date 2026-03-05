@@ -26,8 +26,11 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
   // Request data (if navigated from a report request)
   ReportRequestModel? _fromRequest;
 
-  // User info
-  String? _selectedUserId;
+  // User info — supports multiple user IDs
+  final List<String> _selectedUserIds = [];
+  // Users list fetched from Firestore
+  List<Map<String, dynamic>> _allUsers = [];
+  bool _isLoadingUsers = true;
 
   // Player Info
   final _playerNameController = TextEditingController();
@@ -105,8 +108,39 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
       _fromRequest = args;
       _playerNameController.text = args.playerName;
       _selectedPosition = _normalizeHitterPosition(args.playerPosition);
-      _selectedUserId = args.userId;
+      _selectedUserIds.add(args.userId);
     }
+
+    // Fetch users from Firestore
+    _loadUsers();
+  }
+
+  Future<void> _loadUsers() async {
+    try {
+      final users = await _reportService.fetchAllUsers();
+      if (mounted) {
+        setState(() {
+          _allUsers = users;
+          _isLoadingUsers = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading users: $e');
+      if (mounted) setState(() => _isLoadingUsers = false);
+    }
+  }
+
+  /// Get user display text (email) from user ID.
+  String _getUserDisplay(String userId) {
+    final user = _allUsers.firstWhereOrNull((u) => u['id'] == userId);
+    if (user != null) {
+      final email = user['email'] ?? '';
+      final name = user['name'] ?? '';
+      if (email.isNotEmpty && name.isNotEmpty) return '$name ($email)';
+      if (email.isNotEmpty) return email;
+      if (name.isNotEmpty) return name;
+    }
+    return userId;
   }
 
   @override
@@ -163,51 +197,12 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                 flex: 2,
                 child: Column(
                   children: [
-                    // User Info Card
-                    if (_fromRequest != null)
-                      _buildCard(
-                        title: 'Assigned to User',
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: AppColors.success.withOpacity(0.3)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.check_circle,
-                                  color: AppColors.success, size: 20),
-                              const SizedBox(width: 8),
-                              Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Assigned to: ${_fromRequest!.userName}',
-                                    style: const TextStyle(
-                                        color: AppColors.success,
-                                        fontWeight: FontWeight.w500),
-                                  ),
-                                  Text(
-                                    _fromRequest!.userEmail,
-                                    style: const TextStyle(
-                                        color: AppColors.gray,
-                                        fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      _buildCard(
-                        title: 'Assign to User',
-                        subtitle: 'Enter the user ID for this report',
-                        child: _buildUserIdInput(),
-                      ),
+                    // User Info Card — multi-user assignment
+                    _buildCard(
+                      title: 'Assign to Users',
+                      subtitle: 'Search and select users to receive this report',
+                      child: _buildMultiUserInput(),
+                    ),
 
                     const SizedBox(height: 20),
 
@@ -458,48 +453,191 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     );
   }
 
-  Widget _buildUserIdInput() {
-    final controller = TextEditingController(text: _selectedUserId ?? '');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: controller,
-          style: const TextStyle(color: AppColors.white),
-          decoration: const InputDecoration(
-            hintText: 'Enter User ID...',
-            prefixIcon: Icon(Icons.person_search, color: AppColors.gray),
-          ),
-          onChanged: (value) {
-            _selectedUserId = value.trim().isEmpty ? null : value.trim();
-          },
-        ),
-        if (_selectedUserId != null) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.success.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border:
-                  Border.all(color: AppColors.success.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.check_circle,
-                    color: AppColors.success, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'User ID: $_selectedUserId',
-                  style: const TextStyle(
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w500),
+  Widget _buildMultiUserInput() {
+    final searchController = TextEditingController();
+    return StatefulBuilder(
+      builder: (context, setLocalState) {
+        // Filter users not already selected, matching search
+        final query = searchController.text.toLowerCase();
+        final availableUsers = _allUsers.where((u) {
+          if (_selectedUserIds.contains(u['id'])) return false;
+          if (query.isEmpty) return true;
+          final name = (u['name'] ?? '').toString().toLowerCase();
+          final email = (u['email'] ?? '').toString().toLowerCase();
+          return name.contains(query) || email.contains(query);
+        }).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // From request info
+            if (_fromRequest != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.success.withOpacity(0.3)),
                 ),
-              ],
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle,
+                        color: AppColors.success, size: 20),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Requested by: ${_fromRequest!.userName}',
+                          style: const TextStyle(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w500),
+                        ),
+                        Text(
+                          _fromRequest!.userEmail,
+                          style: const TextStyle(
+                              color: AppColors.gray, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+            // Search field
+            TextField(
+              controller: searchController,
+              style: const TextStyle(color: AppColors.white),
+              decoration: const InputDecoration(
+                hintText: 'Search users by name or email...',
+                prefixIcon: Icon(Icons.person_search, color: AppColors.gray),
+              ),
+              onChanged: (_) => setLocalState(() {}),
             ),
-          ),
-        ],
-      ],
+
+            const SizedBox(height: 8),
+
+            // Users list
+            if (_isLoadingUsers)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.primary),
+                  ),
+                ),
+              )
+            else if (availableUsers.isEmpty && query.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No users found matching search',
+                  style: TextStyle(color: AppColors.gray, fontSize: 12),
+                ),
+              )
+            else
+              Container(
+                constraints: const BoxConstraints(maxHeight: 180),
+                decoration: BoxDecoration(
+                  color: AppColors.sidebarBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.inputBorder),
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: availableUsers.length,
+                  itemBuilder: (ctx, index) {
+                    final user = availableUsers[index];
+                    final name = user['name'] ?? '';
+                    final email = user['email'] ?? '';
+                    final isPremium = user['isPremium'] == true;
+                    return ListTile(
+                      dense: true,
+                      leading: CircleAvatar(
+                        radius: 14,
+                        backgroundColor: isPremium
+                            ? AppColors.premium.withOpacity(0.2)
+                            : AppColors.gray.withOpacity(0.2),
+                        child: Icon(
+                          Icons.person,
+                          size: 14,
+                          color: isPremium ? AppColors.premium : AppColors.gray,
+                        ),
+                      ),
+                      title: Text(
+                        name.isNotEmpty ? name : 'No Name',
+                        style: const TextStyle(
+                            color: AppColors.white, fontSize: 13),
+                      ),
+                      subtitle: Text(
+                        email,
+                        style: const TextStyle(
+                            color: AppColors.gray, fontSize: 11),
+                      ),
+                      trailing: isPremium
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.premium.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('Premium',
+                                  style: TextStyle(
+                                      color: AppColors.premium, fontSize: 9)),
+                            )
+                          : null,
+                      onTap: () {
+                        setState(() => _selectedUserIds.add(user['id']));
+                        setLocalState(() {});
+                        searchController.clear();
+                      },
+                    );
+                  },
+                ),
+              ),
+
+            // Selected user chips (show email)
+            if (_selectedUserIds.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text('Assigned Users:',
+                  style: TextStyle(color: AppColors.gray, fontSize: 11)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _selectedUserIds.map((id) {
+                  return Chip(
+                    avatar: const CircleAvatar(
+                      radius: 10,
+                      backgroundColor: AppColors.primary,
+                      child: Icon(Icons.person, size: 12, color: Colors.white),
+                    ),
+                    label: Text(
+                      _getUserDisplay(id),
+                      style: const TextStyle(
+                          color: AppColors.white, fontSize: 12),
+                    ),
+                    backgroundColor: AppColors.primary.withOpacity(0.2),
+                    deleteIcon: const Icon(Icons.close, size: 16),
+                    deleteIconColor: AppColors.error,
+                    onDeleted: () {
+                      setState(() => _selectedUserIds.remove(id));
+                      setLocalState(() {});
+                    },
+                    side:
+                        BorderSide(color: AppColors.primary.withOpacity(0.4)),
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 
@@ -979,10 +1117,10 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
   Future<void> _saveReport() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedUserId == null || _selectedUserId!.isEmpty) {
+    if (_selectedUserIds.isEmpty) {
       Get.snackbar(
         'Error',
-        'Please assign this report to a user',
+        'Please assign this report to at least one user',
         backgroundColor: AppColors.error,
         colorText: AppColors.white,
       );
@@ -1037,40 +1175,43 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
             double.tryParse(_battingAvgController.text) ?? 0.0,
       );
 
-      // 5. Build the report model
-      final report = ReportModel.hitter(
-        id: '',
-        playerId: _fromRequest?.playerId ?? '',
-        playerName: _playerNameController.text.trim(),
-        position: _selectedPosition,
-        throwsHand: _selectedThrows,
-        createdAt: DateTime.now().toIso8601String(),
-        videoUrl: videoUrl,
-        videoUrl2: videoUrl2,
-        playerImageUrl: playerImageUrl,
-        scoutSummary: _scoutSummaryController.text.trim(),
-        requestId: _fromRequest?.id,
-        userId: _selectedUserId,
-        hitterStats: hitterStats,
-        sprayChartPoints: List<SprayChartPoint>.from(_sprayChartPoints),
-        zoneVsLHP: ZoneHeatmap(zones: _zoneVsLHP.map((r) => List<double>.from(r)).toList()),
-        zoneVsRHP: ZoneHeatmap(zones: _zoneVsRHP.map((r) => List<double>.from(r)).toList()),
-      );
+      // 5. Create a report for each assigned user
+      String? firstReportId;
+      for (final userId in _selectedUserIds) {
+        final report = ReportModel.hitter(
+          id: '',
+          playerId: _fromRequest?.playerId ?? '',
+          playerName: _playerNameController.text.trim(),
+          position: _selectedPosition,
+          throwsHand: _selectedThrows,
+          createdAt: DateTime.now().toIso8601String(),
+          videoUrl: videoUrl,
+          videoUrl2: videoUrl2,
+          playerImageUrl: playerImageUrl,
+          scoutSummary: _scoutSummaryController.text.trim(),
+          requestId: _fromRequest?.id,
+          userId: userId,
+          hitterStats: hitterStats,
+          sprayChartPoints: List<SprayChartPoint>.from(_sprayChartPoints),
+          zoneVsLHP: ZoneHeatmap(zones: _zoneVsLHP.map((r) => List<double>.from(r)).toList()),
+          zoneVsRHP: ZoneHeatmap(zones: _zoneVsRHP.map((r) => List<double>.from(r)).toList()),
+        );
 
-      // 6. Save to Firestore
-      final reportId = await _reportService.createReport(report);
+        final reportId = await _reportService.createReport(report);
+        firstReportId ??= reportId;
+      }
 
-      // 7. If from request, link report to request and mark completed
-      if (_fromRequest != null) {
+      // 6. If from request, link first report to request and mark completed
+      if (_fromRequest != null && firstReportId != null) {
         await _reportService.linkReportToRequest(
           _fromRequest!.id,
-          reportId,
+          firstReportId,
         );
       }
 
       Get.snackbar(
         'Success',
-        'Hitter report saved successfully',
+        'Hitter report saved for ${_selectedUserIds.length} user(s)',
         backgroundColor: AppColors.success,
         colorText: AppColors.white,
       );
