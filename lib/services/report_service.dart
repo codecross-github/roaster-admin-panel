@@ -1,8 +1,10 @@
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import '../models/report_model.dart';
 import '../models/report_request_model.dart';
+import 'fcm_service.dart';
 
 class ReportService {
   final _firestore = FirebaseFirestore.instance;
@@ -132,6 +134,59 @@ class ReportService {
         'isPremium': data['isPremium'] ?? false,
       };
     }).toList();
+  }
+
+  // ── Notifications ──
+
+  /// Create a notification for a user when a report is published.
+  /// Also sends an FCM push notification if the user has a device token.
+  Future<void> createNotification({
+    required String userId,
+    required String reportId,
+    required String playerName,
+    required String reportType,
+  }) async {
+    const title = 'New Report Available';
+    final message =
+        'A $reportType report for $playerName is now available.';
+
+    // 1. Create Firestore notification document
+    await _firestore.collection('notifications').add({
+      'userId': userId,
+      'title': title,
+      'message': message,
+      'type': 'report',
+      'reportId': reportId,
+      'reportType': reportType,
+      'isRead': false,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+
+    // 2. Send FCM push notification
+    try {
+      final userDoc =
+          await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) return;
+
+      final fcmToken = userDoc.data()?['fcmToken'] as String?;
+      if (fcmToken == null || fcmToken.isEmpty) {
+        debugPrint('FCM: User $userId has no FCM token, skipping push.');
+        return;
+      }
+
+      await FcmService.sendPushNotification(
+        fcmToken: fcmToken,
+        title: title,
+        body: message,
+        data: {
+          'reportId': reportId,
+          'reportType': reportType,
+          'type': 'report',
+        },
+      );
+    } catch (e) {
+      debugPrint('Error sending FCM push: $e');
+    }
   }
 
   // ── Dashboard Counts ──

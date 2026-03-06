@@ -1134,6 +1134,14 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
 
         final reportId = await _reportService.createReport(report);
         firstReportId ??= reportId;
+
+        // Send notification to the user
+        await _reportService.createNotification(
+          userId: userId,
+          reportId: reportId,
+          playerName: _playerNameController.text.trim(),
+          reportType: 'pitcher',
+        );
       }
 
       // 5. If from request, link first report to request and mark completed
