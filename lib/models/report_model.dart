@@ -194,6 +194,7 @@ class ReportModel {
   final String playerName;
   final String position;
   final String throwsHand;
+  final String? batsHand; // Hitter batting hand (R, L, S)
   final String reportType; // 'pitcher' or 'hitter'
   final String createdAt;
   final String? videoUrl;
@@ -223,6 +224,7 @@ class ReportModel {
     required this.playerName,
     required this.position,
     required this.throwsHand,
+    this.batsHand,
     required this.reportType,
     required this.createdAt,
     this.videoUrl,
@@ -284,6 +286,7 @@ class ReportModel {
     required String playerName,
     required String position,
     required String throwsHand,
+    required String batsHand,
     required String createdAt,
     String? videoUrl,
     String? videoUrl2,
@@ -302,6 +305,7 @@ class ReportModel {
       playerName: playerName,
       position: position,
       throwsHand: throwsHand,
+      batsHand: batsHand,
       reportType: 'hitter',
       createdAt: createdAt,
       videoUrl: videoUrl,
@@ -326,6 +330,7 @@ class ReportModel {
       playerName: json['playerName'] ?? '',
       position: json['position'] ?? '',
       throwsHand: json['throwsHand'] ?? 'R',
+      batsHand: json['batsHand'],
       reportType: reportType,
       createdAt: json['createdAt'] ?? '',
       videoUrl: json['videoUrl'],
@@ -364,6 +369,7 @@ class ReportModel {
       'playerName': playerName,
       'position': position,
       'throwsHand': throwsHand,
+      'batsHand': batsHand,
       'reportType': reportType,
       'createdAt': createdAt,
       'videoUrl': videoUrl,

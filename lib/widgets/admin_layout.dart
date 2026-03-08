@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
+import '../models/report_request_model.dart';
+import '../services/report_service.dart';
 import 'admin_sidebar.dart';
 
 class AdminLayout extends StatelessWidget {
@@ -16,14 +18,27 @@ class AdminLayout extends StatelessWidget {
     this.actions,
   });
 
+  static final _reportService = ReportService();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Row(
         children: [
-          // Sidebar
-          AdminSidebar(currentIndex: currentIndex),
+          // Sidebar with live pending count
+          StreamBuilder<List<ReportRequestModel>>(
+            stream: _reportService.streamReportRequests(),
+            builder: (context, snapshot) {
+              final pendingCount = (snapshot.data ?? [])
+                  .where((r) => r.status == 'Pending')
+                  .length;
+              return AdminSidebar(
+                currentIndex: currentIndex,
+                pendingRequestsCount: pendingCount,
+              );
+            },
+          ),
 
           // Main Content
           Expanded(

@@ -17,6 +17,14 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
   String _selectedFilter = 'All';
   String _searchQuery = '';
   final _searchController = TextEditingController();
+  String? _highlightReportId;
+  bool _hasShownHighlight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _highlightReportId = Get.arguments as String?;
+  }
 
   List<ReportModel> _applyFilters(List<ReportModel> reports) {
     var filtered = reports;
@@ -107,6 +115,18 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
 
             final allReports = snapshot.data ?? [];
             final filteredReports = _applyFilters(allReports);
+
+            // Auto-scroll to highlighted report from report request
+            if (_highlightReportId != null && !_hasShownHighlight && allReports.isNotEmpty) {
+              _hasShownHighlight = true;
+              final target = allReports.where((r) => r.id == _highlightReportId).firstOrNull;
+              if (target != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _searchController.text = target.playerName;
+                  setState(() => _searchQuery = target.playerName);
+                });
+              }
+            }
 
             return Column(
               children: [
@@ -221,14 +241,17 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
     final isPitcher = report.reportType == 'pitcher';
     final typeColor =
         isPitcher ? AppColors.pitcherBlue : AppColors.hitterGreen;
+    final isHighlighted = report.id == _highlightReportId;
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius:
             BorderRadius.circular(AppConstants.radiusMedium),
-        border:
-            Border.all(color: typeColor.withOpacity(0.3), width: 2),
+        border: Border.all(
+          color: isHighlighted ? AppColors.primary : typeColor.withOpacity(0.3),
+          width: isHighlighted ? 3 : 2,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

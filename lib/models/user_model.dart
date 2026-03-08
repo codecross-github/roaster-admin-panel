@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class UserModel {
   final String id;
   final String name;
@@ -23,6 +25,13 @@ class UserModel {
     this.reportsRequestedCount = 0,
   });
 
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    return DateTime.now();
+  }
+
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       id: json['id'] ?? '',
@@ -31,9 +40,9 @@ class UserModel {
       phone: json['phone'],
       photo: json['photo'],
       isPremium: json['isPremium'] ?? false,
-      createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
+      createdAt: _parseDateTime(json['createdAt']),
       lastLoginAt: json['lastLoginAt'] != null
-          ? DateTime.parse(json['lastLoginAt'])
+          ? _parseDateTime(json['lastLoginAt'])
           : null,
       savedPlayersCount: json['savedPlayersCount'] ?? 0,
       reportsRequestedCount: json['reportsRequestedCount'] ?? 0,

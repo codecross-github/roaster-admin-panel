@@ -28,8 +28,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _emailController.text = 'admin@rosterradar.com';
-    _passwordController.text = 'admin123';
   }
 
   void _handleLogin() {
@@ -175,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           keyboardType: TextInputType.emailAddress,
                           style: const TextStyle(color: AppColors.white),
                           decoration: InputDecoration(
-                            hintText: 'admin@rosterradar.com',
+                            hintText: 'Enter your email',
                             prefixIcon: const Icon(Icons.email_outlined, color: AppColors.gray),
                           ),
                           validator: (value) {

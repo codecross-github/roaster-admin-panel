@@ -404,7 +404,7 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
                   IconButton(
                     onPressed: () {
                       if (request.assignedReportId != null) {
-                        Get.toNamed('/reports');
+                        Get.toNamed('/reports', arguments: request.assignedReportId);
                       }
                     },
                     icon:
@@ -434,7 +434,21 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
     }
   }
 
+  List<String> _getValidNextStatuses(String currentStatus) {
+    switch (currentStatus) {
+      case 'Pending':
+        return ['In Progress', 'Completed'];
+      case 'In Progress':
+        return ['Completed'];
+      default:
+        return [];
+    }
+  }
+
   void _updateStatus(ReportRequestModel request) {
+    final validStatuses = _getValidNextStatuses(request.status);
+    if (validStatuses.isEmpty) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -450,8 +464,13 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
               'Update status for ${request.playerName}\'s report request',
               style: const TextStyle(color: AppColors.gray),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Current: ${request.status}',
+              style: const TextStyle(color: AppColors.gray, fontSize: 12),
+            ),
             const SizedBox(height: 16),
-            ...AppConstants.reportStatuses.map((status) {
+            ...validStatuses.map((status) {
               return ListTile(
                 title: Text(
                   status,
@@ -459,10 +478,10 @@ class _ReportRequestsScreenState extends State<ReportRequestsScreen> {
                 ),
                 leading: Radio<String>(
                   value: status,
-                  groupValue: request.status,
+                  groupValue: null,
                   onChanged: (value) async {
                     Navigator.pop(context);
-                    if (value != null && value != request.status) {
+                    if (value != null) {
                       try {
                         await _reportService.updateRequestStatus(
                           request.id,

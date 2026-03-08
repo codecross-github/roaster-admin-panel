@@ -5,8 +5,13 @@ import '../controllers/auth_controller.dart';
 
 class AdminSidebar extends StatelessWidget {
   final int currentIndex;
+  final int pendingRequestsCount;
 
-  const AdminSidebar({super.key, required this.currentIndex});
+  const AdminSidebar({
+    super.key,
+    required this.currentIndex,
+    this.pendingRequestsCount = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +98,7 @@ class AdminSidebar extends StatelessWidget {
                   label: 'Report Requests',
                   index: 1,
                   route: '/report-requests',
-                  badge: 5,
+                  badge: pendingRequestsCount > 0 ? pendingRequestsCount : null,
                 ),
 
                 const SizedBox(height: 16),

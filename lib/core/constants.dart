@@ -55,4 +55,23 @@ class AppConstants {
   static const List<String> reportStatuses = [
     'Pending', 'In Progress', 'Completed'
   ];
+
+  /// Validates a numeric text field value within a given range.
+  static String? validateNumericRange(
+    String? value, {
+    required double min,
+    required double max,
+    required String fieldName,
+    bool isRequired = true,
+  }) {
+    if (value == null || value.isEmpty) {
+      return isRequired ? '$fieldName is required' : null;
+    }
+    final parsed = double.tryParse(value);
+    if (parsed == null) return 'Enter a valid number';
+    if (parsed < min || parsed > max) {
+      return '$fieldName must be between ${min.toStringAsFixed(min.truncateToDouble() == min ? 0 : 1)} and ${max.toStringAsFixed(max.truncateToDouble() == max ? 0 : 1)}';
+    }
+    return null;
+  }
 }

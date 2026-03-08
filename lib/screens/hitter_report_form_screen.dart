@@ -267,19 +267,23 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                             children: [
                               Expanded(
                                   child: _buildStatInput(
-                                      'Airpull%', _airPullController)),
+                                      'Airpull%', _airPullController,
+                                      validator: (v) => AppConstants.validateNumericRange(v, min: 0, max: 100, fieldName: 'Airpull%'))),
                               const SizedBox(width: 16),
                               Expanded(
                                   child: _buildStatInput(
-                                      'Chase%', _chaseController)),
+                                      'Chase%', _chaseController,
+                                      validator: (v) => AppConstants.validateNumericRange(v, min: 0, max: 100, fieldName: 'Chase%'))),
                               const SizedBox(width: 16),
                               Expanded(
                                   child: _buildStatInput(
-                                      '90th RV', _ninetiethRVController)),
+                                      '90th RV', _ninetiethRVController,
+                                      validator: (v) => AppConstants.validateNumericRange(v, min: -200, max: 200, fieldName: '90th RV'))),
                               const SizedBox(width: 16),
                               Expanded(
                                   child: _buildStatInput(
-                                      'BB%', _bbController)),
+                                      'BB%', _bbController,
+                                      validator: (v) => AppConstants.validateNumericRange(v, min: 0, max: 100, fieldName: 'BB%'))),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -287,20 +291,23 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                             children: [
                               Expanded(
                                   child: _buildStatInput(
-                                      'Miss%', _missController)),
+                                      'Miss%', _missController,
+                                      validator: (v) => AppConstants.validateNumericRange(v, min: 0, max: 100, fieldName: 'Miss%'))),
                               const SizedBox(width: 16),
                               Expanded(
                                   child: _buildStatInput(
-                                      'K%', _kController)),
+                                      'K%', _kController,
+                                      validator: (v) => AppConstants.validateNumericRange(v, min: 0, max: 100, fieldName: 'K%'))),
                               const SizedBox(width: 16),
                               Expanded(
                                   child: _buildStatInput(
-                                      'Exit Velo', _exitVeloController)),
+                                      'Exit Velo', _exitVeloController,
+                                      validator: (v) => AppConstants.validateNumericRange(v, min: 50, max: 130, fieldName: 'Exit Velo'))),
                               const SizedBox(width: 16),
                               Expanded(
                                   child: _buildStatInput(
-                                      'Batting Avg',
-                                      _battingAvgController)),
+                                      'Batting Avg', _battingAvgController,
+                                      validator: (v) => AppConstants.validateNumericRange(v, min: 0, max: 1, fieldName: 'Batting Avg'))),
                             ],
                           ),
                         ],
@@ -735,7 +742,11 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     );
   }
 
-  Widget _buildStatInput(String label, TextEditingController controller) {
+  Widget _buildStatInput(
+    String label,
+    TextEditingController controller, {
+    String? Function(String?)? validator,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -744,7 +755,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
-          keyboardType: TextInputType.number,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           textAlign: TextAlign.center,
           style: const TextStyle(
               color: AppColors.white, fontWeight: FontWeight.bold),
@@ -754,6 +765,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
             filled: true,
             fillColor: AppColors.sidebarBg,
           ),
+          validator: validator,
         ),
       ],
     );
@@ -1184,6 +1196,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
           playerName: _playerNameController.text.trim(),
           position: _selectedPosition,
           throwsHand: _selectedThrows,
+          batsHand: _selectedBats,
           createdAt: DateTime.now().toIso8601String(),
           videoUrl: videoUrl,
           videoUrl2: videoUrl2,

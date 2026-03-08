@@ -328,14 +328,16 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
                             label: 'Peak Velocity (mph)',
                             controller: _peakVeloController,
                             hint: '95.0',
-                            keyboardType: TextInputType.number,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: (v) => AppConstants.validateNumericRange(v, min: 40, max: 110, fieldName: 'Peak Velocity'),
                           ),
                           const SizedBox(height: 12),
                           _buildTextField(
                             label: 'Avg Spin Rate (rpm)',
                             controller: _avgSpinController,
                             hint: '2350',
-                            keyboardType: TextInputType.number,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: (v) => AppConstants.validateNumericRange(v, min: 500, max: 4000, fieldName: 'Avg Spin Rate'),
                           ),
                         ],
                       ),
@@ -591,6 +593,7 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
     required TextEditingController controller,
     String? hint,
     TextInputType? keyboardType,
+    String? Function(String?)? validator,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -603,7 +606,7 @@ class _PitcherReportFormScreenState extends State<PitcherReportFormScreen> {
           keyboardType: keyboardType,
           style: const TextStyle(color: AppColors.white),
           decoration: InputDecoration(hintText: hint),
-          validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+          validator: validator ?? ((v) => v == null || v.isEmpty ? 'Required' : null),
         ),
       ],
     );
