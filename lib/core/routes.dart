@@ -8,6 +8,7 @@ import '../screens/hitter_report_form_screen.dart';
 import '../screens/reports_list_screen.dart';
 import '../screens/players_screen.dart';
 import '../screens/users_screen.dart';
+import '../screens/privacy_policy_screen.dart';
 import '../controllers/auth_controller.dart';
 
 class AuthMiddleware extends GetMiddleware {
@@ -30,6 +31,7 @@ class AppRoutes {
   static const String reportsList = '/reports';
   static const String players = '/players';
   static const String users = '/users';
+  static const String privacyPolicy = '/privacy-policy';
 
   static List<GetPage> get pages => [
         GetPage(name: login, page: () => const LoginScreen()),
@@ -67,6 +69,10 @@ class AppRoutes {
           name: users,
           page: () => const UsersScreen(),
           middlewares: [AuthMiddleware()],
+        ),
+        GetPage(
+          name: privacyPolicy,
+          page: () => const PrivacyPolicyScreen(),
         ),
       ];
 }
