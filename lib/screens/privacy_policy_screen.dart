@@ -58,7 +58,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 ),
                 _section(
                   '2. Information We Collect',
-                  'We collect information that you provide directly to us when you:\n\n• Register for an account (name, email address, phone number)\n• Upload a profile photo\n• Submit scouting report requests\n• Save or favorite player profiles\n• Configure notification preferences and alert criteria\n\nWe also automatically collect certain information when you use the App:\n\n• Device information (device type, operating system, unique device identifiers)\n• Usage data (features accessed, search queries, report views)\n• Firebase Cloud Messaging (FCM) token for push notification delivery\n• Log data (IP address, app crashes, activity timestamps)',
+                  'We collect information that you provide directly to us when you:\n\n• Register for an account (name, email address, phone number)\n• Upload a profile photo\n• Submit scouting report requests\n• Save or favorite player profiles\n• Configure notification preferences and alert criteria\n\nWe also automatically collect certain information when you use the App:\n\n• Device type and operating system\n• Features accessed and search activity within the App\n• Crash reports and error logs to improve stability\n• A unique device identifier used solely for delivering push notifications',
                 ),
                 _section(
                   '3. How We Use Your Information',
@@ -66,11 +66,11 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 ),
                 _section(
                   '4. Sharing of Your Information',
-                  'We do not sell, trade, or rent your personal information to third parties. We may share your information only in the following limited circumstances:\n\n• Service Providers: We use Firebase (Google LLC) for authentication, database storage, file storage, and push notifications. Google\'s privacy policy governs their handling of data.\n• Legal Requirements: We may disclose your information if required by law, court order, or governmental authority.\n• Business Transfers: In the event of a merger, acquisition, or sale of assets, your information may be transferred as part of that transaction.\n• Safety: We may share information to protect the rights, property, or safety of Roster Radar Pro, our users, or others.',
+                  'We do not sell, trade, or rent your personal information to third parties. We may share your information only in the following limited circumstances:\n\n• Service Providers: We work with trusted third-party infrastructure providers to host data and deliver app features. These providers are contractually required to protect your information.\n• Legal Requirements: We may disclose your information if required by law, court order, or governmental authority.\n• Business Transfers: In the event of a merger, acquisition, or sale of assets, your information may be transferred as part of that transaction.\n• Safety: We may share information to protect the rights, property, or safety of Roster Radar Pro, our users, or others.',
                 ),
                 _section(
                   '5. Data Storage & Security',
-                  'Your data is stored in Google Firebase\'s Cloud Firestore and Firebase Storage infrastructure, protected by Google\'s enterprise-grade security.\n\nWe implement appropriate technical and organizational measures to protect your personal information against unauthorized access, alteration, disclosure, or destruction. These include:\n\n• Encrypted data transmission (HTTPS/TLS)\n• Firebase Security Rules restricting data access\n• Authentication-gated access to all user-specific data\n\nHowever, no method of transmission over the internet or electronic storage is 100% secure. We cannot guarantee absolute security.',
+                  'Your data is stored securely on cloud infrastructure protected with industry-standard security measures.\n\nWe take appropriate steps to protect your personal information against unauthorized access, alteration, disclosure, or destruction, including:\n\n• Encrypted data transmission over secure connections\n• Access controls that restrict data to authorized users only\n• Authentication required to access any personal account data\n\nHowever, no method of transmission over the internet is 100% secure. We cannot guarantee absolute security.',
                 ),
                 _section(
                   '6. Data Retention',
@@ -78,11 +78,11 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 ),
                 _section(
                   '7. Third-Party Services',
-                  'The App integrates with the following third-party services:\n\n• Google Firebase (Authentication, Firestore, Storage, Cloud Messaging) — https://firebase.google.com/support/privacy\n• MiLB.com (Official Minor League Baseball website, accessed via in-app WebView restricted to the milb.com domain)\n\nThese third parties have their own privacy policies, and we encourage you to review them. We are not responsible for the privacy practices of these services.',
+                  'The App makes use of trusted third-party services to support core functionality such as data storage, account management, and push notifications. It also includes an in-app view of the official Minor League Baseball website (milb.com) for player profile reference.\n\nThese third parties operate under their own privacy policies. We are not responsible for the privacy practices of external services.',
                 ),
                 _section(
                   '8. Push Notifications',
-                  'With your permission, we send push notifications to your device via Firebase Cloud Messaging (FCM). Notifications may include:\n\n• Scouting report delivery confirmations\n• New free agent alerts matching your saved criteria\n• Report request status updates\n• Player status changes\n\nYou can disable push notifications at any time through your device\'s notification settings or within the App\'s notification preferences.',
+                  'With your permission, we send push notifications to your device. Notifications may include:\n\n• Scouting report delivery confirmations\n• New free agent alerts matching your saved criteria\n• Report request status updates\n• Player status changes\n\nYou can disable push notifications at any time through your device\'s notification settings or within the App\'s notification preferences.',
                 ),
                 _section(
                   '9. Children\'s Privacy',
