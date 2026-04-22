@@ -22,4 +22,21 @@ class UserService {
   Future<void> togglePremium(String userId, bool isPremium) async {
     await _usersRef.doc(userId).update({'isPremium': isPremium});
   }
+
+  /// Stream the admin-controlled flag that determines new-user premium status.
+  Stream<bool> streamIsNewUserPremium() {
+    return _firestore
+        .collection('settings')
+        .doc('app_settings')
+        .snapshots()
+        .map((doc) => doc.data()?['isNewUserPremium'] as bool? ?? false);
+  }
+
+  /// Persist the isNewUserPremium flag in Firestore settings.
+  Future<void> setIsNewUserPremium(bool value) async {
+    await _firestore
+        .collection('settings')
+        .doc('app_settings')
+        .set({'isNewUserPremium': value}, SetOptions(merge: true));
+  }
 }

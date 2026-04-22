@@ -85,6 +85,83 @@ class _UsersScreenState extends State<UsersScreen> {
 
             return Column(
               children: [
+                // New-user premium setting
+                StreamBuilder<bool>(
+                  stream: _userService.streamIsNewUserPremium(),
+                  builder: (context, settingSnap) {
+                    final isNewUserPremium = settingSnap.data ?? false;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 20),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius:
+                            BorderRadius.circular(AppConstants.radiusMedium),
+                        border: Border.all(
+                            color: isNewUserPremium
+                                ? AppColors.premium.withOpacity(0.4)
+                                : AppColors.inputBorder),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.new_releases_outlined,
+                            color: isNewUserPremium
+                                ? AppColors.premium
+                                : AppColors.gray,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'New User Registration',
+                                  style: TextStyle(
+                                      color: AppColors.white,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                Text(
+                                  isNewUserPremium
+                                      ? 'New users are created as Premium'
+                                      : 'New users are created as Free',
+                                  style: const TextStyle(
+                                      color: AppColors.gray, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: isNewUserPremium,
+                            onChanged: (value) async {
+                              try {
+                                await _userService.setIsNewUserPremium(value);
+                                Get.snackbar(
+                                  'Updated',
+                                  'New users will be created as ${value ? 'Premium' : 'Free'}',
+                                  backgroundColor: value
+                                      ? AppColors.premium
+                                      : AppColors.gray,
+                                  colorText: AppColors.white,
+                                );
+                              } catch (e) {
+                                Get.snackbar(
+                                  'Error',
+                                  'Failed to update setting',
+                                  backgroundColor: AppColors.error,
+                                  colorText: AppColors.white,
+                                );
+                              }
+                            },
+                            activeColor: AppColors.premium,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+
                 // Stats Row
                 Row(
                   children: [
