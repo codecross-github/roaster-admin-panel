@@ -17,6 +17,8 @@ class _UsersScreenState extends State<UsersScreen> {
   String _searchQuery = '';
   String _selectedFilter = 'All';
   final _searchController = TextEditingController();
+  String _sortField = 'name'; // 'name' or 'date'
+  bool _sortAscending = true;
 
   List<UserModel> _applyFilters(List<UserModel> users) {
     var filtered = users;
@@ -35,7 +37,29 @@ class _UsersScreenState extends State<UsersScreen> {
           .toList();
     }
 
+    // Sort
+    filtered.sort((a, b) {
+      int cmp;
+      if (_sortField == 'date') {
+        cmp = a.createdAt.compareTo(b.createdAt);
+      } else {
+        cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      }
+      return _sortAscending ? cmp : -cmp;
+    });
+
     return filtered;
+  }
+
+  void _onSort(String field) {
+    setState(() {
+      if (_sortField == field) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortField = field;
+        _sortAscending = true;
+      }
+    });
   }
 
   @override
@@ -242,9 +266,9 @@ class _UsersScreenState extends State<UsersScreen> {
                                 ),
                                 child: Row(
                                   children: [
-                                    _buildHeaderCell('User', flex: 2),
+                                    _buildHeaderCell('User', flex: 2, sortKey: 'name'),
                                     _buildHeaderCell('Status'),
-                                    _buildHeaderCell('Joined'),
+                                    _buildHeaderCell('Joined', sortKey: 'date'),
                                     _buildHeaderCell('Saved Players'),
                                     _buildHeaderCell('Reports'),
                                     _buildHeaderCell('Actions'),
@@ -336,16 +360,45 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
-  Widget _buildHeaderCell(String text, {int flex = 1}) {
+  Widget _buildHeaderCell(String text, {int flex = 1, String? sortKey}) {
+    final isSorted = sortKey != null && _sortField == sortKey;
     return Expanded(
       flex: flex,
-      child: Text(
-        text,
-        style: const TextStyle(
-            color: AppColors.gray,
-            fontWeight: FontWeight.w600,
-            fontSize: 13),
-      ),
+      child: sortKey != null
+          ? InkWell(
+              onTap: () => _onSort(sortKey),
+              borderRadius: BorderRadius.circular(4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    text,
+                    style: TextStyle(
+                      color: isSorted ? AppColors.primary : AppColors.gray,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    isSorted
+                        ? (_sortAscending
+                            ? Icons.arrow_upward
+                            : Icons.arrow_downward)
+                        : Icons.unfold_more,
+                    size: 14,
+                    color: isSorted ? AppColors.primary : AppColors.gray,
+                  ),
+                ],
+              ),
+            )
+          : Text(
+              text,
+              style: const TextStyle(
+                  color: AppColors.gray,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13),
+            ),
     );
   }
 

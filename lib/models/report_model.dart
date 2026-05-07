@@ -215,6 +215,7 @@ class ReportModel {
   // Hitter specific
   final HitterStats? hitterStats;
   final List<SprayChartPoint>? sprayChartPoints;
+  final String? sprayChartImageUrl; // Uploaded spray chart image URL
   final ZoneHeatmap? zoneVsLHP;
   final ZoneHeatmap? zoneVsRHP;
 
@@ -239,6 +240,7 @@ class ReportModel {
     this.scatterPoints,
     this.hitterStats,
     this.sprayChartPoints,
+    this.sprayChartImageUrl,
     this.zoneVsLHP,
     this.zoneVsRHP,
   });
@@ -295,7 +297,8 @@ class ReportModel {
     String? requestId,
     String? userId,
     required HitterStats hitterStats,
-    required List<SprayChartPoint> sprayChartPoints,
+    List<SprayChartPoint>? sprayChartPoints,
+    String? sprayChartImageUrl,
     required ZoneHeatmap zoneVsLHP,
     required ZoneHeatmap zoneVsRHP,
   }) {
@@ -316,6 +319,7 @@ class ReportModel {
       userId: userId,
       hitterStats: hitterStats,
       sprayChartPoints: sprayChartPoints,
+      sprayChartImageUrl: sprayChartImageUrl,
       zoneVsLHP: zoneVsLHP,
       zoneVsRHP: zoneVsRHP,
     );
@@ -353,6 +357,7 @@ class ReportModel {
       sprayChartPoints: json['sprayChartPoints'] != null
           ? (json['sprayChartPoints'] as List).map((e) => SprayChartPoint.fromJson(e)).toList()
           : null,
+      sprayChartImageUrl: json['sprayChartImageUrl'],
       zoneVsLHP: json['zoneVsLHP'] != null
           ? ZoneHeatmap.fromJson(json['zoneVsLHP'])
           : null,
@@ -388,6 +393,7 @@ class ReportModel {
     } else {
       map['hitterStats'] = hitterStats?.toJson();
       map['sprayChartPoints'] = sprayChartPoints?.map((e) => e.toJson()).toList();
+      map['sprayChartImageUrl'] = sprayChartImageUrl;
       map['zoneVsLHP'] = zoneVsLHP?.toJson();
       map['zoneVsRHP'] = zoneVsRHP?.toJson();
     }

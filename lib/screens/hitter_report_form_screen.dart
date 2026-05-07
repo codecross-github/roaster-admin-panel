@@ -2,7 +2,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:math' as math;
 import '../core/constants.dart';
 import '../widgets/admin_layout.dart';
 import '../widgets/player_photo_upload.dart';
@@ -73,8 +72,9 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     [0.0, 0.0, 0.0],
   ];
 
-  // Spray chart points
-  final List<SprayChartPoint> _sprayChartPoints = [];
+  // Spray chart image upload
+  Uint8List? _sprayChartImageBytes;
+  String? _sprayChartImageFileName;
 
   static const _validHitterPositions = [
     'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'
@@ -374,39 +374,18 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                     // Spray Chart
                     _buildCard(
                       title: 'Spray Chart',
-                      subtitle: 'Click on chart to add hit data points (${_sprayChartPoints.length} points)',
-                      action: _sprayChartPoints.isNotEmpty
+                      subtitle: 'Upload a PNG or JPEG spray chart image',
+                      action: _sprayChartImageBytes != null
                           ? TextButton.icon(
-                              onPressed: () => setState(() => _sprayChartPoints.clear()),
+                              onPressed: () => setState(() {
+                                _sprayChartImageBytes = null;
+                                _sprayChartImageFileName = null;
+                              }),
                               icon: const Icon(Icons.clear_all, size: 16),
                               label: const Text('Clear'),
                             )
                           : null,
-                      child: Column(
-                        children: [
-                          _buildSprayChartFan(),
-                          const SizedBox(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _buildLegendItem(
-                                  const Color(0xFF22C55E), 'Single'),
-                              const SizedBox(width: 8),
-                              _buildLegendItem(
-                                  const Color(0xFFEAB308), 'Double'),
-                              const SizedBox(width: 8),
-                              _buildLegendItem(
-                                  const Color(0xFFF97316), 'Triple'),
-                              const SizedBox(width: 8),
-                              _buildLegendItem(
-                                  const Color(0xFFEF4444), 'HR'),
-                              const SizedBox(width: 8),
-                              _buildLegendItem(
-                                  const Color(0xFF6B7280), 'Out'),
-                            ],
-                          ),
-                        ],
-                      ),
+                      child: _buildSprayChartUpload(),
                     ),
 
                     const SizedBox(height: 20),
@@ -771,76 +750,93 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
     );
   }
 
-  // Spray Chart Fan — interactive: click to add data points
-  Widget _buildSprayChartFan() {
-    return GestureDetector(
-      onTapDown: (details) {
-        final RenderBox box = context.findRenderObject() as RenderBox;
-        final localPos = box.globalToLocal(details.globalPosition);
-        // Normalize to -100..100 range
-        final x = ((localPos.dx / box.size.width) * 200) - 100;
-        final y = 100 - ((localPos.dy / box.size.height) * 200);
-        _addSprayChartPoint(x, y);
-      },
-      child: Container(
-        height: 180,
-        decoration: BoxDecoration(
-          color: AppColors.sidebarBg,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: CustomPaint(
-            size: const Size(double.infinity, 180),
-            painter: SprayChartPainter(points: _sprayChartPoints),
-          ),
-        ),
+  // Spray Chart — image upload widget
+  Widget _buildSprayChartUpload() {
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: AppColors.sidebarBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.inputBorder),
       ),
+      child: _sprayChartImageBytes == null
+          ? InkWell(
+              onTap: _pickSprayChartImage,
+              borderRadius: BorderRadius.circular(8),
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.cloud_upload_outlined,
+                        size: 40, color: AppColors.gray),
+                    SizedBox(height: 8),
+                    Text(
+                      'Upload Spray Chart Image',
+                      style: TextStyle(
+                          color: AppColors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    SizedBox(height: 4),
+                    Text('PNG or JPEG',
+                        style:
+                            TextStyle(color: AppColors.gray, fontSize: 12)),
+                  ],
+                ),
+              ),
+            )
+          : Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(
+                    _sprayChartImageBytes!,
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Material(
+                    color: AppColors.card.withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(20),
+                    child: IconButton(
+                      onPressed: () => setState(() {
+                        _sprayChartImageBytes = null;
+                        _sprayChartImageFileName = null;
+                      }),
+                      icon: const Icon(Icons.close, size: 18),
+                      color: AppColors.error,
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
-  void _addSprayChartPoint(double x, double y) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        String selectedHitType = 'single';
-        return AlertDialog(
-          backgroundColor: AppColors.card,
-          title: const Text('Add Hit', style: TextStyle(color: AppColors.white)),
-          content: StatefulBuilder(
-            builder: (ctx, setDialogState) {
-              return DropdownButton<String>(
-                value: selectedHitType,
-                dropdownColor: AppColors.card,
-                style: const TextStyle(color: AppColors.white),
-                isExpanded: true,
-                items: ['single', 'double', 'triple', 'homerun', 'out']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (v) => setDialogState(() => selectedHitType = v!),
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _sprayChartPoints.add(SprayChartPoint(
-                    x: x, y: y, hitType: selectedHitType,
-                  ));
-                });
-                Navigator.pop(ctx);
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        );
-      },
+  Future<void> _pickSprayChartImage() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
     );
+    if (result != null && result.files.isNotEmpty) {
+      final file = result.files.first;
+      if (file.size > 10 * 1024 * 1024) {
+        Get.snackbar('Error', 'Image must be under 10MB',
+            backgroundColor: AppColors.error, colorText: AppColors.white);
+        return;
+      }
+      setState(() {
+        _sprayChartImageBytes = file.bytes;
+        _sprayChartImageFileName = file.name;
+      });
+    }
   }
 
   // Zone Heatmap — interactive: editable 3×3 grid
@@ -886,7 +882,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
                     ),
                     child: Center(
                       child: Text(
-                        value.toStringAsFixed(2),
+                        value.toStringAsFixed(3),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 11,
@@ -922,7 +918,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
 
   void _editZoneValue(List<List<double>> zones, int row, int col) {
     final controller = TextEditingController(
-      text: zones[row][col].toStringAsFixed(2),
+      text: zones[row][col].toStringAsFixed(3),
     );
     showDialog(
       context: context,
@@ -1170,7 +1166,14 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
             _videoBytes2!, _videoFileName2!);
       }
 
-      // 4. Build hitter stats
+      // 4. Upload spray chart image if present
+      String? sprayChartImageUrl;
+      if (_sprayChartImageBytes != null && _sprayChartImageFileName != null) {
+        sprayChartImageUrl = await _reportService.uploadImage(
+            _sprayChartImageBytes!, _sprayChartImageFileName!);
+      }
+
+      // 5. Build hitter stats
       final hitterStats = HitterStats(
         airPullPct:
             double.tryParse(_airPullController.text) ?? 0.0,
@@ -1187,7 +1190,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
             double.tryParse(_battingAvgController.text) ?? 0.0,
       );
 
-      // 5. Create a report for each assigned user
+      // 6. Create a report for each assigned user
       String? firstReportId;
       for (final userId in _selectedUserIds) {
         final report = ReportModel.hitter(
@@ -1205,7 +1208,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
           requestId: _fromRequest?.id,
           userId: userId,
           hitterStats: hitterStats,
-          sprayChartPoints: List<SprayChartPoint>.from(_sprayChartPoints),
+          sprayChartImageUrl: sprayChartImageUrl,
           zoneVsLHP: ZoneHeatmap(zones: _zoneVsLHP.map((r) => List<double>.from(r)).toList()),
           zoneVsRHP: ZoneHeatmap(zones: _zoneVsRHP.map((r) => List<double>.from(r)).toList()),
         );
@@ -1222,7 +1225,7 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
         );
       }
 
-      // 6. If from request, link first report to request and mark completed
+      // 7. If from request, link first report to request and mark completed
       if (_fromRequest != null && firstReportId != null) {
         await _reportService.linkReportToRequest(
           _fromRequest!.id,
@@ -1251,91 +1254,3 @@ class _HitterReportFormScreenState extends State<HitterReportFormScreen> {
   }
 }
 
-// Custom painter for the spray chart fan shape with data points
-class SprayChartPainter extends CustomPainter {
-  final List<SprayChartPoint> points;
-
-  SprayChartPainter({required this.points});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height + 20);
-    final radius = size.height + 10;
-
-    // Draw field background (green gradient)
-    final fieldPaint = Paint()
-      ..color = const Color(0xFF1B4332)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -math.pi,
-      math.pi,
-      true,
-      fieldPaint,
-    );
-
-    // Draw inner rings
-    for (int ring = 1; ring <= 4; ring++) {
-      final ringRadius = radius * (1 - ring * 0.2);
-      final ringPaint = Paint()
-        ..color = Colors.white.withOpacity(0.15)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1;
-
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: ringRadius),
-        -math.pi,
-        math.pi,
-        false,
-        ringPaint,
-      );
-    }
-
-    // Draw radial lines
-    for (int i = 1; i < 8; i++) {
-      final angle = -math.pi + (i * math.pi / 8);
-      final linePaint = Paint()
-        ..color = Colors.white.withOpacity(0.1)
-        ..strokeWidth = 1;
-
-      final endPoint = Offset(
-        center.dx + radius * math.cos(angle),
-        center.dy + radius * math.sin(angle),
-      );
-
-      canvas.drawLine(center, endPoint, linePaint);
-    }
-
-    // Draw data points
-    final hitColors = {
-      'single': const Color(0xFF22C55E),
-      'double': const Color(0xFFEAB308),
-      'triple': const Color(0xFFF97316),
-      'homerun': const Color(0xFFEF4444),
-      'out': const Color(0xFF6B7280),
-    };
-
-    for (final point in points) {
-      final px = center.dx + (point.x / 100) * radius;
-      final py = center.dy - (point.y / 100) * radius;
-
-      final dotPaint = Paint()
-        ..color = hitColors[point.hitType] ?? Colors.white
-        ..style = PaintingStyle.fill;
-
-      canvas.drawCircle(Offset(px, py), 5, dotPaint);
-
-      // White border
-      final borderPaint = Paint()
-        ..color = Colors.white.withOpacity(0.6)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1;
-      canvas.drawCircle(Offset(px, py), 5, borderPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant SprayChartPainter oldDelegate) =>
-      oldDelegate.points.length != points.length;
-}
